@@ -413,6 +413,40 @@ class WeblateClient
             $line = $lines[$i];
 
             if (preg_match('/^msgid_plural\s+"(.+)"$/', $line)) {
+
+                if ($languageCode === 'ja') {
+                    $j = $i + 1;
+
+                    while (
+                        $j < $lineCount &&
+                        !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
+                        !preg_match('/^msgid\s+"/', $lines[$j])
+                    ) {
+                        $j++;
+                    }
+
+                    $translation = '';
+                    if (
+                        $j < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $lines[$j], $mStr)
+                    ) {
+                        $translation = $mStr[1];
+                    }
+
+                    $newLines[] = 'msgstr "' . $translation . '"';
+
+                    $k = $j + 1;
+                    while (
+                        $k < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"/', $lines[$k])
+                    ) {
+                        $k++;
+                    }
+
+                    $i = $k - 1;
+                    continue;
+                }
+
                 $newLines[] = $line;
                 $j = $i + 1;
 
@@ -429,6 +463,7 @@ class WeblateClient
                     $i = $j - 1;
                     continue;
                 }
+
                 $values = [];
                 $k      = $j;
 
@@ -444,6 +479,7 @@ class WeblateClient
                     $val = isset($values[$idx]) ? $values[$idx] : '';
                     $newLines[] = 'msgstr[' . $idx . '] "' . $val . '"';
                 }
+
                 $i = $k - 1;
                 continue;
             }
