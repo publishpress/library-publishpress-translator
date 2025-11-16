@@ -377,7 +377,13 @@ class WeblateClient
             return;
         }
 
+        if (strpos($contents, 'Plural-Forms:') === false &&
+            strpos($contents, 'msgid_plural') === false) {
+            return;
+        }
+
         if ($languageCode === 'ja') {
+            // For Japanese, remove any explicit Plural-Forms and let Weblate use its own rule.
             $contents = preg_replace(
                 '/"Plural-Forms:[^"]*\\\\n"\s*\r?\n?/',
                 '',
@@ -386,6 +392,11 @@ class WeblateClient
             );
         } else {
             $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+
+            if (strpos($contents, $expectedLine) !== false &&
+                strpos($contents, 'msgid_plural') === false) {
+                return;
+            }
 
             if (strpos($contents, 'Plural-Forms:') !== false) {
                 $contents = preg_replace(
