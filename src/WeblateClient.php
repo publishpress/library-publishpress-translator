@@ -307,7 +307,7 @@ class WeblateClient
                         ],
                         [
                             'name' => 'method',
-                            'contents' => 'translate',
+                            'contents' => 'fuzzy',
                         ],
                     ],
                 ]
