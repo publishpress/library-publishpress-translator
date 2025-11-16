@@ -366,10 +366,6 @@ class Translator
         // Step 3: Upload all PO files from local languages directory
         echo "  • Uploading translation files...\n";
         $poFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
-
-        echo "    → Preparing {$languageCode}\n";
-        $this->weblateClient->uploadPo(...);
-        echo "    ✓ Uploaded {$languageCode}\n";
         
         $uploadedCount = 0;
         $failedCount = 0;
@@ -381,7 +377,9 @@ class Translator
             }
             
             $languageCode = $matches[1];
-            
+
+            echo "    → Preparing {$languageCode}\n";
+
             try {
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
                 echo "    ✓ Uploaded {$languageCode}\n";
