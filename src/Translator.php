@@ -355,7 +355,7 @@ class Translator
                     $componentSlug,
                     $textDomain,
                     $potFile,
-                    $this->getGitRepoSlug()
+                    $this->getGitRepoUrl()
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
@@ -422,6 +422,36 @@ class Translator
             }
         }
         
+        return null;
+    }
+    
+    /**
+     * Get GitHub repo URL from plugin root
+     * 
+     * @return string|null
+     */
+    private function getGitRepoUrl()
+    {
+        $gitDir = $this->pluginRoot . '/.git';
+        if (!is_dir($gitDir)) {
+            return null;
+        }
+
+        $configFile = $gitDir . '/config';
+        if (file_exists($configFile)) {
+            $content = file_get_contents($configFile);
+            if (preg_match('/url\s*=\s*(.+?)(\.git)?$/m', $content, $matches)) {
+                $url = $matches[1];
+                if (strpos($url, 'git@github.com:') === 0) {
+                    $url = str_replace('git@github.com:', 'https://github.com/', $url);
+                }
+                if (!str_ends_with($url, '.git')) {
+                    $url .= '.git';
+                }
+                return $url;
+            }
+        }
+
         return null;
     }
     
@@ -691,6 +721,66 @@ class Translator
         
         return $mo;
     }
+
+    /**
+     * Mark identical translations as fuzzy in PO file
+     * 
+     * @param string $poFile
+     */
+    private function markIdenticalTranslationsAsFuzzy($poFile)
+    {
+        $content = file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines  = explode("\n", $content);
+        $result = [];
+
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
+                $msgid = $msgidMatch[1];
+
+                if ($msgid === '') {
+                    $result[] = $line;
+                    continue;
+                }
+
+                // Only handle simple one-line msgstr directly after msgid
+                if (
+                    $i + 1 < count($lines)
+                    && preg_match('/^msgstr\s+"(.+)"$/', $lines[$i + 1], $msgstrMatch)
+                ) {
+                    $msgstr = $msgstrMatch[1];
+
+                    if ($msgid === $msgstr && $msgid !== '') {
+                        $commentIndex = count($result) - 1;
+                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
+                            $commentIndex--;
+                        }
+
+                        if ($commentIndex >= 0) {
+                            if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
+                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
+                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
+                                } else {
+                                    $result[$commentIndex] .= ', fuzzy';
+                                }
+                            }
+                        } else {
+                            $result[] = '#, fuzzy';
+                        }
+                    }
+                }
+            }
+
+            $result[] = $line;
+        }
+
+        file_put_contents($poFile, implode("\n", $result));
+    }
     
     /**
      * Execute translation
@@ -757,6 +847,12 @@ class Translator
                 passthru($command . ' 2>&1', $returnCode);
                 
                 if ($returnCode === 0) {
+
+                    $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
+                    foreach ($poFiles as $poFile) {
+                        $this->markIdenticalTranslationsAsFuzzy($poFile);
+                    }
+                    
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
                 } else {
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");

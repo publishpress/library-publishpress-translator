@@ -62,7 +62,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 120,
+            'timeout' => 3600,
         ]);
     }
     
@@ -96,11 +96,17 @@ class WeblateClient
     public function createProject($projectSlug, $projectName)
     {
         try {
+            if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
+                $webUrl = "https://github.com/{$matches[1]}";
+            } else {
+                $webUrl = "https://github.com/{$projectSlug}";
+            }
+            
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,
                     'slug' => $projectSlug,
-                    'web' => "https://github.com/publishpress/{$projectSlug}",
+                    'web' => $webUrl,
                 ]
             ]);
             
@@ -150,14 +156,20 @@ class WeblateClient
             }
             
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
-            $repoSlug = $gitRepoSlug ?: $componentSlug;
-            
-            if ($repoType === 'ssh') {
-                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+
+            if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+                $repoUrl = $gitRepoSlug;
+                $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
             } else {
-                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                $pushUrl = '';
+               $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                if ($repoType === 'ssh') {
+                    $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                    $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                } else {
+                    $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                    $pushUrl = '';
+                }
             }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
@@ -280,6 +292,8 @@ class WeblateClient
     {
         try {
             $weblateLanguage = $this->mapLanguageCode($language);
+
+            $this->normalizePluralFormsForWeblate($language, $poFilePath);
             
             $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
             
@@ -341,6 +355,71 @@ class WeblateClient
                 throw new Exception("Error checking translation for {$language}: " . $e->getMessage());
             }
         }
+    }
+    
+    /**
+     * Normalize Plural-Forms header in a PO file to match Weblate expectations
+     * for specific languages where Potomatic and Weblate differ.
+     *
+     * @param string $languageCode WordPress language code (e.g., he_IL, ja, yo)
+     * @param string $poFilePath   Path to the generated .po file
+     * @return void
+     */
+    private function normalizePluralFormsForWeblate($languageCode, $poFilePath)
+    {
+        $expected = $this->getWeblatePluralForms($languageCode);
+        if (!$expected) {
+            return;
+        }
+
+        $contents = @file_get_contents($poFilePath);
+        if ($contents === false || $contents === '') {
+            return;
+        }
+
+        $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+
+        if (strpos($contents, 'Plural-Forms:') !== false) {
+            $contents = preg_replace(
+                '/"Plural-Forms:[^"\\n]*\\n"/',
+                $expectedLine,
+                $contents,
+                1
+            );
+        } else {
+            if (strpos($contents, 'Language:') !== false) {
+                $contents = preg_replace(
+                    '/("Language:[^"\\n]*\\n")/',
+                    "$1\n" . $expectedLine,
+                    $contents,
+                    1
+                );
+            } else {
+                return;
+            }
+        }
+
+        @file_put_contents($poFilePath, $contents);
+    }
+
+    /**
+     * Return Weblate's expected Plural-Forms rule for specific languages.
+     * Only languages that have caused validation errors are handled here.
+     *
+     * @param string $languageCode WordPress language code
+     * @return string|null
+     */
+    private function getWeblatePluralForms($languageCode)
+    {
+        // Map WP codes to Weblate plural rules.
+        $map = [
+            'he'    => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'ja'    => 'nplurals=1; plural=0;',
+            'yo'    => 'nplurals=1; plural=0;',
+        ];
+
+        return isset($map[$languageCode]) ? $map[$languageCode] : null;
     }
     
     /**
