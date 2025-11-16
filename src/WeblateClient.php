@@ -307,7 +307,7 @@ class WeblateClient
                         ],
                         [
                             'name' => 'method',
-                            'contents' => 'fuzzy',
+                            'contents' => 'translate',
                         ],
                     ],
                 ]
@@ -377,26 +377,35 @@ class WeblateClient
             return;
         }
 
-        $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
-
-        if (strpos($contents, 'Plural-Forms:') !== false) {
+        if ($languageCode === 'ja') {
             $contents = preg_replace(
-                '/"Plural-Forms:[^"]*\\\\n"/',
-                $expectedLine,
+                '/"Plural-Forms:[^"]*\\\\n"\s*\r?\n?/',
+                '',
                 $contents,
                 1
             );
         } else {
-            if (strpos($contents, 'Language:') !== false) {
+            $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+
+            if (strpos($contents, 'Plural-Forms:') !== false) {
                 $contents = preg_replace(
-                    '/("Language:[^"\\n]*\\n")/',
-                    "$1\n" . $expectedLine,
+                    '/"Plural-Forms:[^"]*\\\\n"/',
+                    $expectedLine,
                     $contents,
                     1
                 );
             } else {
-                @file_put_contents($poFilePath, $contents);
-                return;
+                if (strpos($contents, 'Language:') !== false) {
+                    $contents = preg_replace(
+                        '/("Language:[^"\\n]*\\n")/',
+                        "$1\n" . $expectedLine,
+                        $contents,
+                        1
+                    );
+                } else {
+                    @file_put_contents($poFilePath, $contents);
+                    return;
+                }
             }
         }
 
@@ -416,7 +425,6 @@ class WeblateClient
 
                 if ($languageCode === 'ja') {
                     $j = $i + 1;
-
                     while (
                         $j < $lineCount &&
                         !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
