@@ -381,7 +381,7 @@ class WeblateClient
 
         if (strpos($contents, 'Plural-Forms:') !== false) {
             $contents = preg_replace(
-                '/"Plural-Forms:[^"\\n]*\\n"/',
+                '/"Plural-Forms:[^"]*\\\\n"/',
                 $expectedLine,
                 $contents,
                 1
