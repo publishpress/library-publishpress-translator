@@ -358,8 +358,8 @@ class WeblateClient
     }
     
     /**
-     * Normalize Plural-Forms header in a PO file to match Weblate expectations
-     * for specific languages where Potomatic and Weblate differ.
+     * Normalize Plural-Forms header and plural msgstr[...] entries in a PO file
+     * to match Weblate expectations for specific languages.
      *
      * @param string $languageCode WordPress language code (e.g., he_IL, ja, yo)
      * @param string $poFilePath   Path to the generated .po file
@@ -377,29 +377,127 @@ class WeblateClient
             return;
         }
 
-        $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
-
-        if (strpos($contents, 'Plural-Forms:') !== false) {
+        if ($languageCode === 'ja') {
             $contents = preg_replace(
-                '/"Plural-Forms:[^"\\n]*\\n"/',
-                $expectedLine,
+                '/"Plural-Forms:[^"]*\\\\n"\s*\r?\n?/',
+                '',
                 $contents,
                 1
             );
         } else {
-            if (strpos($contents, 'Language:') !== false) {
+            $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+
+            if (strpos($contents, 'Plural-Forms:') !== false) {
                 $contents = preg_replace(
-                    '/("Language:[^"\\n]*\\n")/',
-                    "$1\n" . $expectedLine,
+                    '/"Plural-Forms:[^"]*\\\\n"/',
+                    $expectedLine,
                     $contents,
                     1
                 );
             } else {
-                return;
+                if (strpos($contents, 'Language:') !== false) {
+                    $contents = preg_replace(
+                        '/("Language:[^"\\n]*\\n")/',
+                        "$1\n" . $expectedLine,
+                        $contents,
+                        1
+                    );
+                } else {
+                    @file_put_contents($poFilePath, $contents);
+                    return;
+                }
             }
         }
 
-        @file_put_contents($poFilePath, $contents);
+        $nplurals = 1;
+        if (preg_match('/nplurals\s*=\s*(\d+)/', $expected, $m)) {
+            $nplurals = max(1, (int) $m[1]);
+        }
+
+        $lines     = preg_split("/(\r\n|\n|\r)/", $contents);
+        $newLines  = [];
+        $lineCount = count($lines);
+
+        for ($i = 0; $i < $lineCount; $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid_plural\s+"(.+)"$/', $line)) {
+
+                if ($languageCode === 'ja') {
+                    $j = $i + 1;
+
+                    while (
+                        $j < $lineCount &&
+                        !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
+                        !preg_match('/^msgid\s+"/', $lines[$j])
+                    ) {
+                        $j++;
+                    }
+
+                    $translation = '';
+                    if (
+                        $j < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $lines[$j], $mStr)
+                    ) {
+                        $translation = $mStr[1];
+                    }
+
+                    $newLines[] = 'msgstr "' . $translation . '"';
+
+                    $k = $j + 1;
+                    while (
+                        $k < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"/', $lines[$k])
+                    ) {
+                        $k++;
+                    }
+
+                    $i = $k - 1;
+                    continue;
+                }
+
+                $newLines[] = $line;
+                $j = $i + 1;
+
+                while (
+                    $j < $lineCount &&
+                    !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
+                    !preg_match('/^msgid\s+"/', $lines[$j])
+                ) {
+                    $newLines[] = $lines[$j];
+                    $j++;
+                }
+
+                if ($j >= $lineCount || !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j])) {
+                    $i = $j - 1;
+                    continue;
+                }
+
+                $values = [];
+                $k      = $j;
+
+                while (
+                    $k < $lineCount &&
+                    preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$k], $mStr)
+                ) {
+                    $values[(int) $mStr[1]] = $mStr[2];
+                    $k++;
+                }
+
+                for ($idx = 0; $idx < $nplurals; $idx++) {
+                    $val = isset($values[$idx]) ? $values[$idx] : '';
+                    $newLines[] = 'msgstr[' . $idx . '] "' . $val . '"';
+                }
+
+                $i = $k - 1;
+                continue;
+            }
+
+            $newLines[] = $line;
+        }
+
+        $normalized = implode("\n", $newLines);
+        @file_put_contents($poFilePath, $normalized);
     }
 
     /**
