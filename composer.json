@@ -11,7 +11,11 @@
     ],
     "require": {
         "php": ">=7.2.5",
-        "ext-json": "*"
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "config": {
+        "process-timeout": 3600
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0"
@@ -31,7 +35,11 @@
         "post-update-cmd": [
             "@setup-potomatic"
         ],
-        "setup-potomatic": "bash scripts/setup-potomatic.sh"
+        "setup-potomatic": [
+            "@php -r \"echo '\\n\\u1F4E6 Setting up Potomatic...\\n';\"",
+            "cd potomatic && npm install --silent || echo 'Warning: npm not found. Please install Node.js from https://nodejs.org/'",
+            "@php -r \"echo '\\u2713 Potomatic ready!\\n\\n';\""
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true

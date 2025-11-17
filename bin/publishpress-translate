@@ -6,6 +6,7 @@
  * 
  * @package PublishPress\Translations
  */
+
 $possibleAutoloadPaths = [
     __DIR__ . '/../../../../autoload.php',
     __DIR__ . '/../../../autoload.php',
@@ -41,10 +42,28 @@ if (!$autoloaderFound) {
 
 use PublishPress\Translations\Translator;
 
+$pluginRoot = getcwd();
+
+if (!file_exists($pluginRoot . '/composer.json')) {
+    fwrite(STDERR, "Error: composer.json not found in current directory ($pluginRoot).\n");
+    fwrite(STDERR, "Please run this command from your plugin's root directory.\n");
+    exit(1);
+}
+
+$setupPotomaticPath = __DIR__ . '/setup-potomatic.php';
+if (file_exists($setupPotomaticPath)) {
+    require_once $setupPotomaticPath;
+} else {
+    fwrite(STDERR, "Error: Required file 'setup-potomatic.php' not found in " . __DIR__ . "\n");
+    exit(1);
+}
+
 $options = getopt('', [
     'dry-run',
     'force',
     'languages:',
+    'download',
+    'upload',
     'help',
 ]);
 
@@ -54,7 +73,7 @@ if (isset($options['help'])) {
 PublishPress Translation Tool
 ==============================
 
-Automatically translates WordPress plugins using AI.
+Automatically translates WordPress plugins using AI and manages translations via Weblate.
 
 Usage:
   publishpress-translate [options]
@@ -63,27 +82,30 @@ Options:
   --dry-run              Preview translations without making API calls
   --force                Force re-translate all strings (ignore existing)
   --languages=LANGS      Comma-separated language codes (default: all configured)
+  --download             Download translations from Weblate (instead of generating)
+  --upload               Upload existing translations to Weblate (no AI translation)
   --help                 Show this help message
 
 Examples:
-  publishpress-translate
-  publishpress-translate --dry-run
-  publishpress-translate --languages=de_DE,fr_FR,es_ES
-  publishpress-translate --force
+  publishpress-translate                           # Generate and upload to Weblate
+  publishpress-translate --dry-run                 # Preview without API calls
+  publishpress-translate --languages=de_DE,fr_FR   # Translate specific languages
+  publishpress-translate --force                   # Force re-translate all
+  publishpress-translate --download                # Download from Weblate
+  publishpress-translate --upload                  # Upload existing translations to Weblate
 
 Environment Variables:
-  OPENAI_API_KEY        Required for actual translations (not needed for --dry-run)
+  OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
+  WEBLATE_API_TOKEN     Required for Weblate integration (upload/download)
+
+Workflow:
+  1. Generate translations:  publishpress-translate
+  2. Review in Weblate:      https://hosted.weblate.org/
+  3. Download updates:       publishpress-translate --download
+  4. Build plugin with translations in /languages folder
 
 HELP;
     exit(0);
-}
-
-$pluginRoot = getcwd();
-
-if (!file_exists($pluginRoot . '/composer.json')) {
-    fwrite(STDERR, "Error: Not in a plugin directory. No composer.json found.\n");
-    fwrite(STDERR, "Please run this command from your plugin's root directory.\n");
-    exit(1);
 }
 
 try {
@@ -102,7 +124,14 @@ try {
         $translator->setTargetLanguages($languages);
     }
     
-    $result = $translator->translate();
+    // Check mode
+    if (isset($options['download'])) {
+        $result = $translator->downloadFromWeblate();
+    } elseif (isset($options['upload'])) {
+        $result = $translator->uploadToWeblate();
+    } else {
+        $result = $translator->translate();
+    }
     
     if ($result) {
         exit(0);

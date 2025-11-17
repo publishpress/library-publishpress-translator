@@ -6,6 +6,12 @@
 
 $libDir = dirname(__DIR__);
 $potomaticDir = $libDir . '/potomatic';
+$nodeModulesDir = $potomaticDir . '/node_modules';
+
+if (is_dir($nodeModulesDir)) {
+    echo "✓ Potomatic already set up\n";
+    return;
+}
 
 echo "Setting up Potomatic CLI tool...\n";
 
@@ -20,6 +26,9 @@ if ($returnCode !== 0) {
     echo "Visit: https://nodejs.org/\n";
     exit(1);
 }
+
+$nodeVersion = trim($output[0] ?? '');
+echo "Found {$nodeVersion}\n";
 
 exec('npm --version 2>&1', $output, $returnCode);
 if ($returnCode !== 0) {
@@ -38,7 +47,7 @@ chdir($potomaticDir);
 $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 $npmCommand = $isWindows ? 'npm.cmd' : 'npm';
 
-passthru("{$npmCommand} install --production", $returnCode);
+passthru("{$npmCommand} install --production 2>&1", $returnCode);
 
 if ($returnCode === 0) {
     echo "✓ Potomatic setup complete!\n";

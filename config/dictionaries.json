@@ -2,6 +2,8 @@
     "brand_terms": {
         "PublishPress": "PublishPress",
         "TaxoPress": "TaxoPress",
+        "Tag-Groups": "Tag-Groups",
+        "MetaSlider": "MetaSlider",
         "WordPress": "WordPress",
         "WooCommerce": "WooCommerce"
     },
