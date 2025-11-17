@@ -291,36 +291,58 @@ class WeblateClient
      */
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
-        try {
-            $weblateLanguage = $this->mapLanguageCode($language);
+        $maxRetries = 2;
+        $attempt    = 0;
 
-            $this->normalizePluralFormsForWeblate($language, $poFilePath);
-            
-            $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
-            
-            $response = $this->client->post(
-                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
-                [
-                    'multipart' => [
-                        [
-                            'name' => 'file',
-                            'contents' => fopen($poFilePath, 'r'),
+        while (true) {
+            try {
+                $weblateLanguage = $this->mapLanguageCode($language);
+
+                $this->normalizePluralFormsForWeblate($language, $poFilePath);
+                $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
+
+                $response = $this->client->post(
+                    "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
+                    [
+                        'multipart' => [
+                            [
+                                'name'     => 'file',
+                                'contents' => fopen($poFilePath, 'r'),
+                            ],
+                            [
+                                'name'     => 'method',
+                                'contents' => 'translate',
+                            ],
                         ],
-                        [
-                            'name' => 'method',
-                            'contents' => 'translate',
-                        ],
-                    ],
-                ]
-            );
-            
-            return $response->getStatusCode() === 200;
-        } catch (GuzzleException $e) {
-            $errorBody = '';
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                $errorBody = $e->getResponse()->getBody()->getContents();
+                    ]
+                );
+
+                return $response->getStatusCode() === 200;
+
+            } catch (GuzzleException $e) {
+                $attempt++;
+
+                $isTimeout = $e->getCode() === 28
+                    || strpos($e->getMessage(), 'cURL error 28') !== false;
+
+                if ($isTimeout && $attempt <= $maxRetries) {
+                    echo "      retrying {$language} after timeout (attempt {$attempt} of {$maxRetries})...\n";
+                    sleep(5);
+                    continue;
+                }
+
+                $errorBody = '';
+                if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                    $errorBody = $e->getResponse()->getBody()->getContents();
+                }
+
+                throw new Exception(
+                    "Error uploading PO file for {$language}: " .
+                    $e->getMessage() .
+                    "\n" .
+                    $errorBody
+                );
             }
-            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
     
