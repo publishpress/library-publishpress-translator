@@ -55,6 +55,7 @@ class WeblateClient
         }
         
         $this->apiUrl = rtrim($this->apiUrl, '/') . '/';
+        $timeout = getenv('WEBLATE_API_TIMEOUT') ?: 120;
         
         $this->client = new Client([
             'base_uri' => $this->apiUrl,
@@ -62,7 +63,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 3600,
+            'timeout' => (int) $timeout,
         ]);
     }
     

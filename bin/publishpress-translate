@@ -45,12 +45,18 @@ use PublishPress\Translations\Translator;
 $pluginRoot = getcwd();
 
 if (!file_exists($pluginRoot . '/composer.json')) {
-    fwrite(STDERR, "Error: Not in a plugin directory. No composer.json found.\n");
+    fwrite(STDERR, "Error: composer.json not found in current directory ($pluginRoot).\n");
     fwrite(STDERR, "Please run this command from your plugin's root directory.\n");
     exit(1);
 }
 
-require_once __DIR__ . '/setup-potomatic.php';
+$setupPotomaticPath = __DIR__ . '/setup-potomatic.php';
+if (file_exists($setupPotomaticPath)) {
+    require_once $setupPotomaticPath;
+} else {
+    fwrite(STDERR, "Error: Required file 'setup-potomatic.php' not found in " . __DIR__ . "\n");
+    exit(1);
+}
 
 $options = getopt('', [
     'dry-run',
