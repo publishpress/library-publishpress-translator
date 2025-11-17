@@ -55,6 +55,7 @@ class WeblateClient
         }
         
         $this->apiUrl = rtrim($this->apiUrl, '/') . '/';
+        $timeout = getenv('WEBLATE_API_TIMEOUT') ?: 120;
         
         $this->client = new Client([
             'base_uri' => $this->apiUrl,
@@ -62,7 +63,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 120,
+            'timeout' => (int) $timeout,
         ]);
     }
     
@@ -93,14 +94,20 @@ class WeblateClient
      * @return array
      * @throws Exception
      */
-    public function createProject($projectSlug, $projectName)
+    public function createProject($projectSlug, $projectName, $gitRepoUrl = null)
     {
         try {
+            if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
+                $webUrl = "https://github.com/{$matches[1]}";
+            } else {
+                $webUrl = "https://github.com/{$projectSlug}";
+            }
+            
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,
                     'slug' => $projectSlug,
-                    'web' => "https://github.com/publishpress/{$projectSlug}",
+                    'web' => $webUrl,
                 ]
             ]);
             
@@ -150,14 +157,20 @@ class WeblateClient
             }
             
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
-            $repoSlug = $gitRepoSlug ?: $componentSlug;
-            
-            if ($repoType === 'ssh') {
-                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+
+            if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+                $repoUrl = $gitRepoSlug;
+                $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
             } else {
-                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                $pushUrl = '';
+               $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                if ($repoType === 'ssh') {
+                    $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                    $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                } else {
+                    $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                    $pushUrl = '';
+                }
             }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
@@ -278,34 +291,58 @@ class WeblateClient
      */
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
-        try {
-            $weblateLanguage = $this->mapLanguageCode($language);
-            
-            $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
-            
-            $response = $this->client->post(
-                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
-                [
-                    'multipart' => [
-                        [
-                            'name' => 'file',
-                            'contents' => fopen($poFilePath, 'r'),
+        $maxRetries = 2;
+        $attempt    = 0;
+
+        while (true) {
+            try {
+                $weblateLanguage = $this->mapLanguageCode($language);
+
+                $this->normalizePluralFormsForWeblate($language, $poFilePath);
+                $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
+
+                $response = $this->client->post(
+                    "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
+                    [
+                        'multipart' => [
+                            [
+                                'name'     => 'file',
+                                'contents' => fopen($poFilePath, 'r'),
+                            ],
+                            [
+                                'name'     => 'method',
+                                'contents' => 'translate',
+                            ],
                         ],
-                        [
-                            'name' => 'method',
-                            'contents' => 'fuzzy',
-                        ],
-                    ],
-                ]
-            );
-            
-            return $response->getStatusCode() === 200;
-        } catch (GuzzleException $e) {
-            $errorBody = '';
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                $errorBody = $e->getResponse()->getBody()->getContents();
+                    ]
+                );
+
+                return $response->getStatusCode() === 200;
+
+            } catch (GuzzleException $e) {
+                $attempt++;
+
+                $isTimeout = $e->getCode() === 28
+                    || strpos($e->getMessage(), 'cURL error 28') !== false;
+
+                if ($isTimeout && $attempt <= $maxRetries) {
+                    echo "      retrying {$language} after timeout (attempt {$attempt} of {$maxRetries})...\n";
+                    sleep(5);
+                    continue;
+                }
+
+                $errorBody = '';
+                if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                    $errorBody = $e->getResponse()->getBody()->getContents();
+                }
+
+                throw new Exception(
+                    "Error uploading PO file for {$language}: " .
+                    $e->getMessage() .
+                    "\n" .
+                    $errorBody
+                );
             }
-            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
     
@@ -344,6 +381,180 @@ class WeblateClient
     }
     
     /**
+     * Normalize Plural-Forms header and plural msgstr[...] entries in a PO file
+     * to match Weblate expectations for specific languages.
+     *
+     * @param string $languageCode WordPress language code (e.g., he_IL, ja, yo)
+     * @param string $poFilePath   Path to the generated .po file
+     * @return void
+     */
+    private function normalizePluralFormsForWeblate($languageCode, $poFilePath)
+    {
+        $expected = $this->getWeblatePluralForms($languageCode);
+        if (!$expected) {
+            return;
+        }
+
+        $contents = @file_get_contents($poFilePath);
+        if ($contents === false || $contents === '') {
+            return;
+        }
+
+        if (strpos($contents, 'Plural-Forms:') === false &&
+            strpos($contents, 'msgid_plural') === false) {
+            return;
+        }
+
+        if ($languageCode === 'ja') {
+            // For Japanese, remove any explicit Plural-Forms and let Weblate use its own rule.
+            $contents = preg_replace(
+                '/"Plural-Forms:[^"]*\\\\n"\s*\r?\n?/',
+                '',
+                $contents,
+                1
+            );
+        } else {
+            $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+
+            if (strpos($contents, $expectedLine) !== false &&
+                strpos($contents, 'msgid_plural') === false) {
+                return;
+            }
+
+            if (strpos($contents, 'Plural-Forms:') !== false) {
+                $contents = preg_replace(
+                    '/"Plural-Forms:[^"]*\\\\n"/',
+                    $expectedLine,
+                    $contents,
+                    1
+                );
+            } else {
+                if (strpos($contents, 'Language:') !== false) {
+                    $contents = preg_replace(
+                        '/("Language:[^"\\n]*\\n")/',
+                        "$1\n" . $expectedLine,
+                        $contents,
+                        1
+                    );
+                } else {
+                    // If neither Plural-Forms nor Language is found, do not write back the file.
+                    return;
+                }
+            }
+        }
+
+        $nplurals = 1;
+        if (preg_match('/nplurals\s*=\s*(\d+)/', $expected, $m)) {
+            $nplurals = max(1, (int) $m[1]);
+        }
+
+        $lines     = preg_split("/(\r\n|\n|\r)/", $contents);
+        $newLines  = [];
+        $lineCount = count($lines);
+
+        for ($i = 0; $i < $lineCount; $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid_plural\s+"(.+)"$/', $line)) {
+
+                if ($languageCode === 'ja') {
+                    $j = $i + 1;
+
+                    while (
+                        $j < $lineCount &&
+                        !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
+                        !preg_match('/^msgid\s+"/', $lines[$j])
+                    ) {
+                        $j++;
+                    }
+
+                    $translation = '';
+                    if (
+                        $j < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $lines[$j], $mStr)
+                    ) {
+                        $translation = $mStr[1];
+                    }
+
+                    $newLines[] = 'msgstr "' . $translation . '"';
+
+                    $k = $j + 1;
+                    while (
+                        $k < $lineCount &&
+                        preg_match('/^msgstr\[\d+\]\s+"/', $lines[$k])
+                    ) {
+                        $k++;
+                    }
+
+                    $i = $k - 1;
+                    continue;
+                }
+
+                $newLines[] = $line;
+                $j = $i + 1;
+
+                while (
+                    $j < $lineCount &&
+                    !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
+                    !preg_match('/^msgid\s+"/', $lines[$j])
+                ) {
+                    $newLines[] = $lines[$j];
+                    $j++;
+                }
+
+                if ($j >= $lineCount || !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j])) {
+                    $i = $j - 1;
+                    continue;
+                }
+
+                $values = [];
+                $k      = $j;
+
+                while (
+                    $k < $lineCount &&
+                    preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$k], $mStr)
+                ) {
+                    $values[(int) $mStr[1]] = $mStr[2];
+                    $k++;
+                }
+
+                for ($idx = 0; $idx < $nplurals; $idx++) {
+                    $val = isset($values[$idx]) ? $values[$idx] : '';
+                    $newLines[] = 'msgstr[' . $idx . '] "' . $val . '"';
+                }
+
+                $i = $k - 1;
+                continue;
+            }
+
+            $newLines[] = $line;
+        }
+
+        $normalized = implode("\n", $newLines);
+        @file_put_contents($poFilePath, $normalized);
+    }
+
+    /**
+     * Return Weblate's expected Plural-Forms rule for specific languages.
+     * Only languages that have caused validation errors are handled here.
+     *
+     * @param string $languageCode WordPress language code
+     * @return string|null
+     */
+    private function getWeblatePluralForms($languageCode)
+    {
+        // Map WP codes to Weblate plural rules.
+        $map = [
+            'he'    => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'ja'    => 'nplurals=1; plural=0;',
+            'yo'    => 'nplurals=1; plural=0;',
+        ];
+
+        return isset($map[$languageCode]) ? $map[$languageCode] : null;
+    }
+    
+    /**
      * Download PO file for a language
      * 
      * @param string $projectSlug
@@ -354,19 +565,40 @@ class WeblateClient
      */
     public function downloadPo($projectSlug, $componentSlug, $language)
     {
-        try {
-            $weblateLanguage = $this->mapLanguageCode($language);
-            
-            $response = $this->client->get(
-                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
-            );
-            
-            return $response->getBody()->getContents();
-        } catch (GuzzleException $e) {
-            if ($e->getCode() === 404) {
-                return null;
+        $maxRetries = 2;
+        $attempt    = 0;
+
+        while (true) {
+            try {
+                $weblateLanguage = $this->mapLanguageCode($language);
+
+                $response = $this->client->get(
+                    "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
+                );
+
+                return $response->getBody()->getContents();
+
+            } catch (GuzzleException $e) {
+                $attempt++;
+
+                if ($e->getCode() === 404) {
+                    return null;
+                }
+
+                $isTimeout = $e->getCode() === 28
+                    || strpos($e->getMessage(), 'cURL error 28') !== false;
+
+                if ($isTimeout && $attempt <= $maxRetries) {
+                    echo "      retrying download for {$language} after timeout (attempt {$attempt} of {$maxRetries})...\n";
+                    sleep(5);
+                    continue;
+                }
+
+                throw new Exception(
+                    "Error downloading PO file for {$language}: " .
+                    $e->getMessage()
+                );
             }
-            throw new Exception("Error downloading PO file for {$language}: " . $e->getMessage());
         }
     }
     
