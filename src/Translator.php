@@ -591,6 +591,8 @@ class Translator
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
                     
                     if ($poContent) {
+                        echo "    → Downloading {$language}\n";
+                        
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
                         file_put_contents($poFile, $poContent);
                         
