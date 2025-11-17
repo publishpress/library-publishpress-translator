@@ -93,7 +93,7 @@ class WeblateClient
      * @return array
      * @throws Exception
      */
-    public function createProject($projectSlug, $projectName)
+    public function createProject($projectSlug, $projectName, $gitRepoUrl = null)
     {
         try {
             if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
@@ -414,7 +414,7 @@ class WeblateClient
                         1
                     );
                 } else {
-                    @file_put_contents($poFilePath, $contents);
+                    // If neither Plural-Forms nor Language is found, do not write back the file.
                     return;
                 }
             }

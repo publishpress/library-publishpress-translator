@@ -140,7 +140,7 @@ class Translator
         $this->targetLanguages = $languages;
     }
 
-        /**
+    /**
      * Enable or disable Weblate integration
      * 
      * @param bool $enabled
@@ -256,7 +256,7 @@ class Translator
         $indicators = [
             getenv('DOCKER_CONTAINER') !== false,
             getenv('CONTAINER') !== false,
-            strpos($this->pluginRoot, '/project') === 0,
+            strpos($this->pluginRoot, 'project') !== false,
             file_exists($this->pluginRoot . '/lib/composer.json'),
             is_dir($this->pluginRoot . '/dev-workspace'),
         ];
