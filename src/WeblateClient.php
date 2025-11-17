@@ -565,19 +565,40 @@ class WeblateClient
      */
     public function downloadPo($projectSlug, $componentSlug, $language)
     {
-        try {
-            $weblateLanguage = $this->mapLanguageCode($language);
-            
-            $response = $this->client->get(
-                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
-            );
-            
-            return $response->getBody()->getContents();
-        } catch (GuzzleException $e) {
-            if ($e->getCode() === 404) {
-                return null;
+        $maxRetries = 2;
+        $attempt    = 0;
+
+        while (true) {
+            try {
+                $weblateLanguage = $this->mapLanguageCode($language);
+
+                $response = $this->client->get(
+                    "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
+                );
+
+                return $response->getBody()->getContents();
+
+            } catch (GuzzleException $e) {
+                $attempt++;
+
+                if ($e->getCode() === 404) {
+                    return null;
+                }
+
+                $isTimeout = $e->getCode() === 28
+                    || strpos($e->getMessage(), 'cURL error 28') !== false;
+
+                if ($isTimeout && $attempt <= $maxRetries) {
+                    echo "      retrying download for {$language} after timeout (attempt {$attempt} of {$maxRetries})...\n";
+                    sleep(5);
+                    continue;
+                }
+
+                throw new Exception(
+                    "Error downloading PO file for {$language}: " .
+                    $e->getMessage()
+                );
             }
-            throw new Exception("Error downloading PO file for {$language}: " . $e->getMessage());
         }
     }
     
