@@ -240,6 +240,10 @@ class Translator
         
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
+                if (!is_executable($path)) {
+                    @chmod($path, 0755);
+                }
+
                 return $path;
             }
         }
