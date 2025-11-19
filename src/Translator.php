@@ -389,14 +389,14 @@ class Translator
                     in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
                     echo "    ⊘ {$languageCode} (source language, read-only)\n";
                 } else {
-                    echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
+                    fwrite(STDERR, "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n");
                     $failedCount++;
                 }
             }
         }
         
         if ($failedCount > 0) {
-            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+            fwrite(STDERR, "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n");
         } else {
             echo "  ✓ All translations uploaded\n";
         }
@@ -573,7 +573,7 @@ class Translator
             try {
                 if (!$this->weblateClient->componentExists($projectSlug, $textDomain)) {
                     if (!$silent) {
-                        echo "  ⚠️  Component not found on Weblate, skipping...\n\n";
+                        fwrite(STDERR, "  ⚠️  Component not found on Weblate, skipping...\n\n");
                     }
                     continue;
                 }
@@ -828,7 +828,7 @@ class Translator
                 $this->downloadFromWeblate(true); // Silent mode
                 echo "✓ Existing translations downloaded\n\n";
             } catch (Exception $e) {
-                echo "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n";
+                fwrite(STDERR, "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n");
             }
         }
         
