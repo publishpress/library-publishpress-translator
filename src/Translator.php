@@ -71,16 +71,25 @@ class Translator
     private $weblateClient = null;
     
     /**
+     * Default Potomatic AI settings
+     */
+    private const DEFAULT_AI_MODEL = 'gpt-4o-mini';
+    private const DEFAULT_AI_BATCH_SIZE = 20;
+    private const DEFAULT_AI_JOBS = 2;
+    private const DEFAULT_AI_MAX_COST = 5.0;
+    private const DEFAULT_AI_VERBOSE_LEVEL = 2;
+
+    /**
      * Potomatic settings
      * 
      * @var array
      */
     private $potomaticSettings = [
-        'model' => 'gpt-4o-mini',
-        'batch_size' => 20,
-        'jobs' => 2,
-        'max_cost' => 5.0,
-        'verbose_level' => 2,
+        'model' => self::DEFAULT_AI_MODEL,
+        'batch_size' => self::DEFAULT_AI_BATCH_SIZE,
+        'jobs' => self::DEFAULT_AI_JOBS,
+        'max_cost' => self::DEFAULT_AI_MAX_COST,
+        'verbose_level' => self::DEFAULT_AI_VERBOSE_LEVEL,
     ];
     
     /**
