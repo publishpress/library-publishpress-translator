@@ -25,7 +25,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 
 **Note:** This setup works the same whether you're working from the plugin root or inside dev-workspace.
 
-### Step 1: Add to `lib/composer.json`
+### Step 1: Add to root `composer.json`
 
 ⚠️ **Current setup (until published on Packagist):**
 
@@ -38,38 +38,40 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         }
     ],
     "require": {
-        "publishpress/translations": "dev-main"
-    }
-}
-```
-
-### Step 2: Add to root `composer.json`
-
-```json
-{
+        "publishpress/translations": "^1.0"
+    },
     "scripts": {
-        "translate": "lib/vendor/bin/publishpress-translate",
-        "translate:dry-run": "lib/vendor/bin/publishpress-translate --dry-run",
-        "translate:download": "lib/vendor/bin/publishpress-translate --download",
-        "translate:upload": "lib/vendor/bin/publishpress-translate --upload",
-        "translate:custom": "lib/vendor/bin/publishpress-translate --languages",
-        "translate:force": "lib/vendor/bin/publishpress-translate --force",
-        "translate:force-custom": "lib/vendor/bin/publishpress-translate --force --languages"
+        "translate": "vendor/bin/publishpress-translate",
+        "translate:dry-run": "vendor/bin/publishpress-translate --dry-run",
+        "translate:download": "vendor/bin/publishpress-translate --download",
+        "translate:upload": "vendor/bin/publishpress-translate --upload",
+        "translate:custom": "vendor/bin/publishpress-translate --languages",
+        "translate:force": "vendor/bin/publishpress-translate --force",
+        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages"
     }
 }
 ```
 
-### Step 3: Install
+### Step 2: Install
 
 ```bash
 composer update
 ```
 
-**Once on Packagist:** We can change Step 1 to:
+**Once on Packagist:** You can remove the custom `repositories` section and keep only the dependency and scripts:
 ```json
 {
     "require": {
         "publishpress/translations": "^1.0"
+    },
+    "scripts": {
+        "translate": "vendor/bin/publishpress-translate",
+        "translate:dry-run": "vendor/bin/publishpress-translate --dry-run",
+        "translate:download": "vendor/bin/publishpress-translate --download",
+        "translate:upload": "vendor/bin/publishpress-translate --upload",
+        "translate:custom": "vendor/bin/publishpress-translate --languages",
+        "translate:force": "vendor/bin/publishpress-translate --force",
+        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages"
     }
 }
 ```
@@ -108,6 +110,31 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 1. Sign up at [hosted.weblate.org](https://hosted.weblate.org/)
 2. Go to your profile: https://hosted.weblate.org/accounts/profile/#api
 3. Copy your personal API key
+
+### Additional configuration
+
+The following environment variables control advanced behaviour:
+
+- **`OPENAI_API_KEY`** (required for live translation)  
+  Used to call the OpenAI API.  
+  If it is **missing**:
+  - In **dry run** mode, the tool prints a warning but continues so you can verify the workflow without incurring cost.
+  - In **live** mode, the tool prints a clear warning and exits before making any API calls.
+
+- **`WEBLATE_API_TOKEN`** (optional for AI generation, required for Weblate sync)  
+  If not set, Weblate integration is disabled:
+  - You can still generate local translations.
+  - Upload/download with Weblate will be skipped and a warning will be printed.
+
+- **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)  
+  Override this if you use a self-hosted Weblate instance.
+
+- **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)  
+  HTTP timeout used for Weblate API requests.  
+  For large projects or slow connections this may be too short. You can increase it, for example:
+
+  ```bash
+  export WEBLATE_API_TIMEOUT=300
 
 ### Complete Translation Workflow
 
@@ -258,9 +285,14 @@ export WEBLATE_API_TOKEN=wlu_your-token
 
 This shouldn't happen if you installed via Composer. If it does, please report it as a bug.
 
-### "OPENAI_API_KEY not set" Error
+### "OPENAI_API_KEY not set" warning / exit
 
-Make sure you've set the environment variable before running the translation command.
+If `OPENAI_API_KEY` is not configured:
+
+- In **dry run** (`composer translate:dry-run`), the tool prints a warning but continues so you can verify configuration without any API calls.
+- In **live mode** (`composer translate`), the tool prints a clear message and exits before attempting any OpenAI requests.
+
+Make sure you've set the environment variable before running live translations.
 
 ### "Weblate not configured" Error
 
