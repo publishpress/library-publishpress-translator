@@ -733,8 +733,13 @@ class Translator
      */
     private function markIdenticalTranslationsAsFuzzy($poFile)
     {
-        $content = file_get_contents($poFile);
-        if ($content === false || $content === '') {
+        $content = @file_get_contents($poFile);
+        if ($content === false) {
+            fwrite(STDERR, "Warning: Failed to read file: {$poFile}\n");
+            return;
+        }
+        if ($content === '') {
+            fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
             return;
         }
 
