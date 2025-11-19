@@ -595,6 +595,7 @@ class Translator
                     if ($poContent) {
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
                         file_put_contents($poFile, $poContent);
+                        chmod($poFile, 0644);
                         
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
@@ -663,7 +664,12 @@ class Translator
         }
 
         $mo = $this->buildMoFile($entries);
-        return file_put_contents($moFile, $mo) !== false;
+        $written = file_put_contents($moFile, $mo) !== false;
+        if ($written) {
+            chmod($moFile, 0644);
+        }
+
+        return $written;
     }
     
     /**
