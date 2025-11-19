@@ -826,12 +826,20 @@ class Translator
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
-        
-        if (!$this->dryRun && !$this->getApiKey()) {
-            fwrite(STDERR, "Error: OPENAI_API_KEY environment variable not set.\n");
+    
+        $apiKey = $this->getApiKey();
+        if (!$apiKey) {
+            fwrite(STDERR, "Warning: OPENAI_API_KEY environment variable not set.\n");
             fwrite(STDERR, "Please set your OpenAI API key:\n");
             fwrite(STDERR, "  export OPENAI_API_KEY=your-api-key-here\n\n");
-            return false;
+            
+            if (!$this->dryRun) {
+                return false;
+            }
+        }
+        if (!$this->weblateEnabled && !getenv('WEBLATE_API_TOKEN')) {
+            fwrite(STDERR, "Warning: WEBLATE_API_TOKEN environment variable not set.\n");
+            fwrite(STDERR, "Weblate integration is disabled; translations will not be synced.\n\n");
         }
         
         // Step 1: Download existing translations from Weblate (if enabled)
