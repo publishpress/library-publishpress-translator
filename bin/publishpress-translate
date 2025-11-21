@@ -1,3 +1,4 @@
+#!/usr/bin/env php
 <?php
 /**
  * PublishPress Translation CLI
@@ -50,7 +51,7 @@ if (!file_exists($pluginRoot . '/composer.json')) {
     exit(1);
 }
 
-$setupPotomaticPath = __DIR__ . '/setup-potomatic.php';
+$setupPotomaticPath = dirname(__DIR__) . '/scripts/setup-potomatic.php';
 if (file_exists($setupPotomaticPath)) {
     require_once $setupPotomaticPath;
 } else {

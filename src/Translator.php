@@ -71,16 +71,25 @@ class Translator
     private $weblateClient = null;
     
     /**
+     * Default Potomatic AI settings
+     */
+    private const DEFAULT_AI_MODEL = 'gpt-4o-mini';
+    private const DEFAULT_AI_BATCH_SIZE = 20;
+    private const DEFAULT_AI_JOBS = 2;
+    private const DEFAULT_AI_MAX_COST = 5.0;
+    private const DEFAULT_AI_VERBOSE_LEVEL = 2;
+
+    /**
      * Potomatic settings
      * 
      * @var array
      */
     private $potomaticSettings = [
-        'model' => 'gpt-4o-mini',
-        'batch_size' => 20,
-        'jobs' => 2,
-        'max_cost' => 5.0,
-        'verbose_level' => 2,
+        'model' => self::DEFAULT_AI_MODEL,
+        'batch_size' => self::DEFAULT_AI_BATCH_SIZE,
+        'jobs' => self::DEFAULT_AI_JOBS,
+        'max_cost' => self::DEFAULT_AI_MAX_COST,
+        'verbose_level' => self::DEFAULT_AI_VERBOSE_LEVEL,
     ];
     
     /**
@@ -231,6 +240,10 @@ class Translator
         
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
+                if (!is_executable($path)) {
+                    @chmod($path, 0755);
+                }
+
                 return $path;
             }
         }
@@ -389,14 +402,14 @@ class Translator
                     in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
                     echo "    ⊘ {$languageCode} (source language, read-only)\n";
                 } else {
-                    echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
+                    fwrite(STDERR, "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n");
                     $failedCount++;
                 }
             }
         }
         
         if ($failedCount > 0) {
-            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+            fwrite(STDERR, "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n");
         } else {
             echo "  ✓ All translations uploaded\n";
         }
@@ -573,7 +586,7 @@ class Translator
             try {
                 if (!$this->weblateClient->componentExists($projectSlug, $textDomain)) {
                     if (!$silent) {
-                        echo "  ⚠️  Component not found on Weblate, skipping...\n\n";
+                        fwrite(STDERR, "  ⚠️  Component not found on Weblate, skipping...\n\n");
                     }
                     continue;
                 }
@@ -595,6 +608,7 @@ class Translator
                     if ($poContent) {
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
                         file_put_contents($poFile, $poContent);
+                        chmod($poFile, 0644);
                         
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
@@ -663,7 +677,12 @@ class Translator
         }
 
         $mo = $this->buildMoFile($entries);
-        return file_put_contents($moFile, $mo) !== false;
+        $written = file_put_contents($moFile, $mo) !== false;
+        if ($written) {
+            chmod($moFile, 0644);
+        }
+
+        return $written;
     }
     
     /**
@@ -733,8 +752,13 @@ class Translator
      */
     private function markIdenticalTranslationsAsFuzzy($poFile)
     {
-        $content = file_get_contents($poFile);
-        if ($content === false || $content === '') {
+        $content = @file_get_contents($poFile);
+        if ($content === false) {
+            fwrite(STDERR, "Warning: Failed to read file: {$poFile}\n");
+            return;
+        }
+        if ($content === '') {
+            fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
             return;
         }
 
@@ -802,12 +826,20 @@ class Translator
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
-        
-        if (!$this->dryRun && !$this->getApiKey()) {
-            fwrite(STDERR, "Error: OPENAI_API_KEY environment variable not set.\n");
+    
+        $apiKey = $this->getApiKey();
+        if (!$apiKey) {
+            fwrite(STDERR, "Warning: OPENAI_API_KEY environment variable not set.\n");
             fwrite(STDERR, "Please set your OpenAI API key:\n");
             fwrite(STDERR, "  export OPENAI_API_KEY=your-api-key-here\n\n");
-            return false;
+            
+            if (!$this->dryRun) {
+                return false;
+            }
+        }
+        if (!$this->weblateEnabled && !getenv('WEBLATE_API_TOKEN')) {
+            fwrite(STDERR, "Warning: WEBLATE_API_TOKEN environment variable not set.\n");
+            fwrite(STDERR, "Weblate integration is disabled; translations will not be synced.\n\n");
         }
         
         // Step 1: Download existing translations from Weblate (if enabled)
@@ -817,7 +849,7 @@ class Translator
                 $this->downloadFromWeblate(true); // Silent mode
                 echo "✓ Existing translations downloaded\n\n";
             } catch (Exception $e) {
-                echo "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n";
+                fwrite(STDERR, "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n");
             }
         }
         

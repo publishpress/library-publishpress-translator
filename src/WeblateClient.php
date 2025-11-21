@@ -173,12 +173,14 @@ class WeblateClient
                 }
             }
             
+            $branch = getenv('WEBLATE_GIT_BRANCH') ?: 'development';
+
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
                     'name' => $componentName,
                     'slug' => $componentSlug,
                     'repo' => $repoUrl,
-                    'branch' => 'development',
+                    'branch' => $branch,
                     'push' => $pushUrl,
                     'vcs' => 'git',
                     'file_format' => 'po',
