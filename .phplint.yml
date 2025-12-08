@@ -1,0 +1,19 @@
+path:
+  - src
+  - bin
+jobs: 10
+extensions:
+  - php
+exclude:
+  - .github
+  - .vscode
+  - .idea
+  - /tests
+  - .wordpress-org
+  - vendor
+  - /dist
+  - languages
+  - node_modules
+  - dev-workspace
+  - /cache
+  - .cache

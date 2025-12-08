@@ -2,9 +2,9 @@
 <?php
 /**
  * PublishPress Translation CLI
- * 
+ *
  * Translates WordPress plugins using AI-powered Potomatic
- * 
+ *
  * @package PublishPress\Translations
  */
 
@@ -22,7 +22,7 @@ if ($cwd) {
 $autoloaderFound = false;
 foreach ($possibleAutoloadPaths as $autoloadPath) {
     $autoloadPath = str_replace('\\', '/', $autoloadPath);
-    
+
     if (file_exists($autoloadPath)) {
         require_once $autoloadPath;
         $autoloaderFound = true;
@@ -111,20 +111,20 @@ HELP;
 
 try {
     $translator = new Translator($pluginRoot);
-    
+
     if (isset($options['dry-run'])) {
         $translator->setDryRun(true);
     }
-    
+
     if (isset($options['force'])) {
         $translator->setForceTranslate(true);
     }
-    
+
     if (isset($options['languages'])) {
         $languages = array_map('trim', explode(',', $options['languages']));
         $translator->setTargetLanguages($languages);
     }
-    
+
     // Check mode
     if (isset($options['download'])) {
         $result = $translator->downloadFromWeblate();
@@ -133,13 +133,12 @@ try {
     } else {
         $result = $translator->translate();
     }
-    
+
     if ($result) {
         exit(0);
     } else {
         exit(1);
     }
-    
 } catch (Exception $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
     exit(1);

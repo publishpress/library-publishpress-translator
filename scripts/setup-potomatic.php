@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Setup script for Potomatic CLI tool
  * This runs automatically when the package is installed via Composer
