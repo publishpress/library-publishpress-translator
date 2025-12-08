@@ -115,22 +115,22 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 
 The following environment variables control advanced behaviour:
 
-- **`OPENAI_API_KEY`** (required for live translation)  
-  Used to call the OpenAI API.  
+- **`OPENAI_API_KEY`** (required for live translation)
+  Used to call the OpenAI API.
   If it is **missing**:
   - In **dry run** mode, the tool prints a warning but continues so you can verify the workflow without incurring cost.
   - In **live** mode, the tool prints a clear warning and exits before making any API calls.
 
-- **`WEBLATE_API_TOKEN`** (optional for AI generation, required for Weblate sync)  
+- **`WEBLATE_API_TOKEN`** (optional for AI generation, required for Weblate sync)
   If not set, Weblate integration is disabled:
   - You can still generate local translations.
   - Upload/download with Weblate will be skipped and a warning will be printed.
 
-- **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)  
+- **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
   Override this if you use a self-hosted Weblate instance.
 
-- **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)  
-  HTTP timeout used for Weblate API requests.  
+- **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)
+  HTTP timeout used for Weblate API requests.
   For large projects or slow connections this may be too short. You can increase it, for example:
 
   ```bash

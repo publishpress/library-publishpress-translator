@@ -1,7 +1,8 @@
 <?php
+
 /**
  * Weblate API Client
- * 
+ *
  * @package PublishPress\Translations
  */
 
@@ -15,28 +16,28 @@ class WeblateClient
 {
     /**
      * Weblate API base URL
-     * 
+     *
      * @var string
      */
     private $apiUrl;
-    
+
     /**
      * Weblate API token
-     * 
+     *
      * @var string
      */
     private $apiToken;
-    
+
     /**
      * HTTP client
-     * 
+     *
      * @var Client
      */
     private $client;
-    
+
     /**
      * Constructor
-     * 
+     *
      * @param string|null $apiUrl
      * @param string|null $apiToken
      * @throws Exception
@@ -45,18 +46,18 @@ class WeblateClient
     {
         $this->apiUrl = $apiUrl ?: getenv('WEBLATE_API_URL') ?: 'https://hosted.weblate.org/api/';
         $this->apiToken = $apiToken ?: getenv('WEBLATE_API_TOKEN');
-        
+
         if (!$this->apiToken) {
             throw new Exception(
                 "Weblate API token not found.\n" .
-                "Please set WEBLATE_API_TOKEN environment variable.\n" .
-                "Get your token from: https://hosted.weblate.org/accounts/profile/#api"
+                    "Please set WEBLATE_API_TOKEN environment variable.\n" .
+                    "Get your token from: https://hosted.weblate.org/accounts/profile/#api"
             );
         }
-        
+
         $this->apiUrl = rtrim($this->apiUrl, '/') . '/';
         $timeout = getenv('WEBLATE_API_TIMEOUT') ?: 120;
-        
+
         $this->client = new Client([
             'base_uri' => $this->apiUrl,
             'headers' => [
@@ -66,10 +67,10 @@ class WeblateClient
             'timeout' => (int) $timeout,
         ]);
     }
-    
+
     /**
      * Check if project exists
-     * 
+     *
      * @param string $projectSlug
      * @return bool
      */
@@ -85,10 +86,10 @@ class WeblateClient
             throw new Exception("Error checking project: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Create a new project
-     * 
+     *
      * @param string $projectSlug
      * @param string $projectName
      * @return array
@@ -102,7 +103,7 @@ class WeblateClient
             } else {
                 $webUrl = "https://github.com/{$projectSlug}";
             }
-            
+
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,
@@ -110,16 +111,16 @@ class WeblateClient
                     'web' => $webUrl,
                 ]
             ]);
-            
+
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
             throw new Exception("Error creating project: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Check if component exists
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @return bool
@@ -136,10 +137,10 @@ class WeblateClient
             throw new Exception("Error checking component: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Create a new component
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @param string $componentName
@@ -155,14 +156,14 @@ class WeblateClient
             if ($potContent === false) {
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
-            
+
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
 
             if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
                 $repoUrl = $gitRepoSlug;
                 $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
             } else {
-               $repoSlug = $gitRepoSlug ?: $componentSlug;
+                $repoSlug = $gitRepoSlug ?: $componentSlug;
 
                 if ($repoType === 'ssh') {
                     $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
@@ -172,7 +173,7 @@ class WeblateClient
                     $pushUrl = '';
                 }
             }
-            
+
             $branch = getenv('WEBLATE_GIT_BRANCH') ?: 'development';
 
             $response = $this->client->post("projects/{$projectSlug}/components/", [
@@ -191,7 +192,7 @@ class WeblateClient
                     'update_on_commit' => false,
                 ]
             ]);
-            
+
             $result = json_decode($response->getBody()->getContents(), true);
             return $result;
         } catch (GuzzleException $e) {
@@ -202,10 +203,10 @@ class WeblateClient
             throw new Exception("Error creating component: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
-    
+
     /**
      * Upload POT file to component
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @param string $potFilePath
@@ -231,7 +232,7 @@ class WeblateClient
                     ]
                 ]
             );
-            
+
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
             throw new Exception("Error uploading POT file: " . $e->getMessage());
@@ -240,7 +241,7 @@ class WeblateClient
 
     /**
      * Map WordPress language codes to Weblate language codes
-     * 
+     *
      * @param string $wpLangCode WordPress language code
      * @return string Weblate language code
      */
@@ -256,7 +257,7 @@ class WeblateClient
             'pt_BR' => 'pt_BR',
             'sr_RS' => 'sr_RS',
         ];
-        
+
         // If there's a special mapping, use it
         if (isset($specialMappings[$wpLangCode])) {
             return $specialMappings[$wpLangCode];
@@ -270,20 +271,20 @@ class WeblateClient
             $fullCode = "{$languageCode}_{$countryCode}";
 
             $fullFormatCodes = ['en_GB', 'pt_BR', 'he_IL', 'sr_RS'];
-            
+
             if (in_array($fullCode, $fullFormatCodes)) {
                 return $fullCode;
             }
-            
+
             return $languageCode;
         }
-        
+
         return strtolower($wpLangCode);
     }
-    
+
     /**
      * Upload PO file for a language
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @param string $language WordPress language code
@@ -320,7 +321,6 @@ class WeblateClient
                 );
 
                 return $response->getStatusCode() === 200;
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -340,17 +340,17 @@ class WeblateClient
 
                 throw new Exception(
                     "Error uploading PO file for {$language}: " .
-                    $e->getMessage() .
-                    "\n" .
-                    $errorBody
+                        $e->getMessage() .
+                        "\n" .
+                        $errorBody
                 );
             }
         }
     }
-    
+
     /**
      * Ensure translation exists for a language
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @param string $language
@@ -381,7 +381,7 @@ class WeblateClient
             }
         }
     }
-    
+
     /**
      * Normalize Plural-Forms header and plural msgstr[...] entries in a PO file
      * to match Weblate expectations for specific languages.
@@ -402,8 +402,10 @@ class WeblateClient
             return;
         }
 
-        if (strpos($contents, 'Plural-Forms:') === false &&
-            strpos($contents, 'msgid_plural') === false) {
+        if (
+            strpos($contents, 'Plural-Forms:') === false &&
+            strpos($contents, 'msgid_plural') === false
+        ) {
             return;
         }
 
@@ -418,8 +420,10 @@ class WeblateClient
         } else {
             $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
 
-            if (strpos($contents, $expectedLine) !== false &&
-                strpos($contents, 'msgid_plural') === false) {
+            if (
+                strpos($contents, $expectedLine) !== false &&
+                strpos($contents, 'msgid_plural') === false
+            ) {
                 return;
             }
 
@@ -555,10 +559,10 @@ class WeblateClient
 
         return isset($map[$languageCode]) ? $map[$languageCode] : null;
     }
-    
+
     /**
      * Download PO file for a language
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @param string $language
@@ -579,7 +583,6 @@ class WeblateClient
                 );
 
                 return $response->getBody()->getContents();
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -598,15 +601,15 @@ class WeblateClient
 
                 throw new Exception(
                     "Error downloading PO file for {$language}: " .
-                    $e->getMessage()
+                        $e->getMessage()
                 );
             }
         }
     }
-    
+
     /**
      * Get component statistics
-     * 
+     *
      * @param string $projectSlug
      * @param string $componentSlug
      * @return array
