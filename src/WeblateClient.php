@@ -114,7 +114,20 @@ class WeblateClient
 
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
-            throw new Exception("Error creating project: " . $e->getMessage());
+            $errorBody = '';
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorBody = $e->getResponse()->getBody()->getContents();
+            }
+
+            if (strpos($errorBody, '"code":"unique"') !== false &&
+                strpos($errorBody, '"attr":"slug"') !== false) {
+                return [
+                    'slug' => $projectSlug,
+                    'name' => $projectName,
+                ];
+            }
+
+            throw new Exception("Error creating project: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
 
@@ -156,21 +169,52 @@ class WeblateClient
             if ($potContent === false) {
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
-
+            
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
 
-            if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
-                $repoUrl = $gitRepoSlug;
-                $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
-            } else {
-                $repoSlug = $gitRepoSlug ?: $componentSlug;
+            $overrideRepoUrl = getenv('WEBLATE_REPO_URL') ?: null;
+            $overridePushUrl = getenv('WEBLATE_PUSH_URL') ?: null;
 
-                if ($repoType === 'ssh') {
-                    $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                    $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+            if ($overrideRepoUrl) {
+                $repoUrl = $overrideRepoUrl;
+
+                if ($overridePushUrl !== null) {
+                    $pushUrl = $overridePushUrl;
                 } else {
-                    $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                    $pushUrl = '';
+                    if (strpos($overrideRepoUrl, 'git@') === 0 || strpos($overrideRepoUrl, '@github.com:') !== false) {
+                        $pushUrl = $overrideRepoUrl;
+                    } else {
+                        $pushUrl = '';
+                    }
+                }
+
+            } else {
+
+                if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+
+                    if (
+                        $repoType === 'ssh'
+                        && preg_match('#^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#', $gitRepoSlug, $matches)
+                    ) {
+                        $owner = $matches[1];
+                        $name  = $matches[2];
+                        $repoUrl = "git@github.com:{$owner}/{$name}.git";
+                        $pushUrl = $repoUrl;
+                    } else {
+                        $repoUrl = $gitRepoSlug;
+                        $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
+                    }
+
+                } else {
+                    $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                    if ($repoType === 'ssh') {
+                        $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                        $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                    } else {
+                        $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                        $pushUrl = '';
+                    }
                 }
             }
 
@@ -200,8 +244,61 @@ class WeblateClient
             if (method_exists($e, 'getResponse') && $e->getResponse()) {
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
+
+            if (strpos($errorBody, '"code":"invalid"') !== false &&
+                strpos($errorBody, '"attr":"name"') !== false &&
+                strpos($errorBody, 'Component or category with the same name already exists at this level.') !== false) {
+                return [
+                    'slug' => $componentSlug,
+                    'name' => $componentName,
+                ];
+            }
+
             throw new Exception("Error creating component: " . $e->getMessage() . "\n" . $errorBody);
         }
+    }
+    
+    /**
+     * Clean POT file for Weblate by removing fuzzy flag from header
+     *
+     * @param string $potFilePath
+     * @return string Cleaned POT content
+     */
+    private function cleanPotFileForWeblate($potFilePath)
+    {
+        $content = file_get_contents($potFilePath);
+        if ($content === false) {
+            throw new Exception("Failed to read POT file: {$potFilePath}");
+        }
+        
+        $lines = explode("\n", $content);
+        $cleanedLines = [];
+        $headerFuzzyRemoved = false;
+        
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            $trimmed = trim($line);
+
+            if (!$headerFuzzyRemoved && preg_match('/^#,\s*fuzzy/', $trimmed)) {
+                $lookAhead = $i + 1;
+                while ($lookAhead < count($lines)) {
+                    $nextLine = trim($lines[$lookAhead]);
+                    if (empty($nextLine) || preg_match('/^#/', $nextLine)) {
+                        $lookAhead++;
+                        continue;
+                    }
+                    if (preg_match('/^msgid\s+""?\s*$/', $nextLine)) {
+                        $headerFuzzyRemoved = true;
+                        continue 2;
+                    }
+                    break;
+                }
+            }
+            
+            $cleanedLines[] = $line;
+        }
+        
+        return implode("\n", $cleanedLines);
     }
 
     /**
@@ -216,26 +313,74 @@ class WeblateClient
     public function uploadPot($projectSlug, $componentSlug, $potFilePath)
     {
         try {
-            $response = $this->client->post(
-                "translations/{$projectSlug}/{$componentSlug}/en/file/",
-                [
-                    'multipart' => [
-                        [
-                            'name' => 'file',
-                            'contents' => fopen($potFilePath, 'r'),
-                            'filename' => basename($potFilePath),
-                        ],
-                        [
-                            'name' => 'method',
-                            'contents' => 'replace',
-                        ],
+            $cleanedContent = $this->cleanPotFileForWeblate($potFilePath);
+            $hasVcs = $this->componentHasVcs($projectSlug, $componentSlug);
+            
+            if ($hasVcs) {
+                $response = $this->client->post(
+                    "translations/{$projectSlug}/{$componentSlug}/en/file/",
+                    [
+                        'multipart' => [
+                            [
+                                'name' => 'file',
+                                'contents' => fopen($potFilePath, 'r'),
+                                'filename' => basename($potFilePath),
+                            ],
+                            [
+                                'name' => 'method',
+                                'contents' => 'replace',
+                            ],
+                        ]
                     ]
-                ]
-            );
-
+                );
+            } else {
+                $this->ensureTranslation($projectSlug, $componentSlug, 'en');
+                
+                $response = $this->client->post(
+                    "translations/{$projectSlug}/{$componentSlug}/en/file/",
+                    [
+                        'multipart' => [
+                            [
+                                'name' => 'file',
+                                'contents' => $cleanedContent,
+                                'filename' => basename($potFilePath),
+                            ],
+                            [
+                                'name' => 'method',
+                                'contents' => 'source',
+                            ],
+                        ]
+                    ]
+                );
+            }
+            
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
             throw new Exception("Error uploading POT file: " . $e->getMessage());
+        }
+    }
+
+    private function componentHasVcs($projectSlug, $componentSlug)
+    {
+        try {
+            $response = $this->client->get("components/{$projectSlug}/{$componentSlug}/");
+            $component = json_decode($response->getBody()->getContents(), true);
+            
+            if (empty($component['repo'])) {
+                return false;
+            }
+
+            if (strpos($component['repo'], 'weblate://') === 0) {
+                return false;
+            }
+
+            if ($component['repo'] === 'local:') {
+                return false;
+            }
+
+            return true;
+        } catch (GuzzleException $e) {
+            return false;
         }
     }
 
@@ -247,15 +392,41 @@ class WeblateClient
      */
     private function mapLanguageCode($wpLangCode)
     {
+        // Normalize weird prefixes like "--languages=" coming from filenames
+        if (strpos($wpLangCode, '--languages=') === 0) {
+            $wpLangCode = substr($wpLangCode, strlen('--languages='));
+        }
+
         // Special mappings that don't follow the standard pattern
         $specialMappings = [
             'zh_CN' => 'zh_Hans',
             'zh_TW' => 'zh_Hant',
             'fil' => 'fil',
             'yo' => 'yo',
+
             'en_GB' => 'en_GB',
+            'en_AU' => 'en_AU',
+            'en_CA' => 'en_CA',
+            'en_ZA' => 'en_ZA',
+
             'pt_BR' => 'pt_BR',
             'sr_RS' => 'sr_RS',
+            'nb_NO' => 'nb_NO',
+            'nb'    => 'nb_NO',
+            'pt_PT' => 'pt_PT',
+
+            'nl_BE' => 'nl_BE',
+            'nl_NL' => 'nl',
+
+            'de_DE' => 'de',
+            'de_DE_formal'  => 'de',
+            'de_CH'         => 'de_CH',
+
+            'es_AR'         => 'es_AR',
+            'es_CL'         => 'es_CL',
+            'es_CO'         => 'es_CO',
+            'es_MX'         => 'es_MX',
+            'es_ES'         => 'es',
         ];
 
         // If there's a special mapping, use it
@@ -283,6 +454,196 @@ class WeblateClient
     }
 
     /**
+     * Remove duplicate PO file headers while preserving translations
+     *
+     * @param string $poFilePath Path to PO file to clean
+     * @return bool True if file was modified, false otherwise
+     */
+    public function cleanupDuplicatePoHeaders($poFilePath)
+    {
+        $content = @file_get_contents($poFilePath);
+        if ($content === false || $content === '') {
+            return false;
+        }
+
+        $lines = explode("\n", $content);
+        $cleanedLines = [];
+        $headerFound = false;
+        $inHeader = false;
+        $inHeaderMsgstr = false;
+        $currentHeaderLines = [];
+        $headerStartLine = -1;
+        
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            $trimmed = trim($line);
+            
+            if (preg_match('/^msgid\s+""?\s*$/', $trimmed)) {
+                $nextIdx = $i + 1;
+                while ($nextIdx < count($lines) && trim($lines[$nextIdx]) === '') {
+                    $nextIdx++;
+                }
+                
+                if ($nextIdx < count($lines) && preg_match('/^msgstr\s+""?\s*$/', trim($lines[$nextIdx]))) {
+                    if (!$headerFound) {
+                        $headerFound = true;
+                        $inHeader = true;
+                        $headerStartLine = $i;
+                        $currentHeaderLines = [$line];
+                    } else {
+                        $inHeader = true;
+                        $inHeaderMsgstr = false;
+                        
+                        while ($i < count($lines)) {
+                            $i++;
+                            if ($i >= count($lines)) break;
+                            
+                            $nextLine = trim($lines[$i]);
+                            
+                            if (preg_match('/^msgid\s+"(.+)"/', $nextLine)) {
+                                $i--;
+                                break;
+                            }
+                            
+                            if (preg_match('/^msgid\s+""?\s*$/', $nextLine)) {
+                                $i--;
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            
+            if ($inHeader && $headerFound && $headerStartLine >= 0) {
+                $currentHeaderLines[] = $line;
+                
+                if (preg_match('/^msgstr\s+""?\s*$/', $trimmed)) {
+                    $inHeaderMsgstr = true;
+                } elseif ($inHeaderMsgstr && !preg_match('/^".*"/', $trimmed) && $trimmed !== '') {
+                    $inHeader = false;
+                    $inHeaderMsgstr = false;
+                    
+                    foreach ($currentHeaderLines as $headerLine) {
+                        $cleanedLines[] = $headerLine;
+                    }
+                    $currentHeaderLines = [];
+                    
+                    $cleanedLines[] = $line;
+                }
+            } elseif (!$inHeader) {
+                $cleanedLines[] = $line;
+            }
+        }
+        
+        if (!empty($currentHeaderLines)) {
+            foreach ($currentHeaderLines as $headerLine) {
+                $cleanedLines[] = $headerLine;
+            }
+        }
+        
+        $cleanedContent = implode("\n", $cleanedLines);
+        
+        if ($cleanedContent !== $content) {
+            @file_put_contents($poFilePath, $cleanedContent);
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Remove duplicate reference (#:) lines from PO file
+     *
+     * @param string $poFilePath
+     * @return void
+     */
+    private function removeDuplicateReferences($poFilePath)
+    {
+        $content = @file_get_contents($poFilePath);
+        if ($content === false || $content === '') {
+            return;
+        }
+        
+        $lines = explode("\n", $content);
+        $cleanedLines = [];
+        $seenReferences = [];
+        $inEntry = false;
+        
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            
+            if (preg_match('/^#:\s*(.+)$/', $trimmed, $matches)) {
+                $reference = $matches[1];
+                
+                if (isset($seenReferences[$reference])) {
+                    continue;
+                }
+                
+                $seenReferences[$reference] = true;
+                $cleanedLines[] = $line;
+            } else {
+                if (preg_match('/^msgid\s/', $trimmed)) {
+                    $seenReferences = [];
+                }
+                
+                $cleanedLines[] = $line;
+            }
+        }
+        
+        $cleanedContent = implode("\n", $cleanedLines);
+        if ($cleanedContent !== $content) {
+            file_put_contents($poFilePath, $cleanedContent);
+        }
+    }
+
+    /**
+     * Remove fuzzy flag from PO file header
+     *
+     * @param string $poFilePath
+     * @return void
+     */
+    private function removeFuzzyFromPoHeader($poFilePath)
+    {
+        $content = @file_get_contents($poFilePath);
+        if ($content === false || $content === '') {
+            return;
+        }
+        
+        $lines = explode("\n", $content);
+        $cleanedLines = [];
+        $headerFuzzyRemoved = false;
+        
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            $trimmed = trim($line);
+            
+            if (!$headerFuzzyRemoved && preg_match('/^#,\s*fuzzy/', $trimmed)) {
+                $lookAhead = $i + 1;
+                while ($lookAhead < count($lines)) {
+                    $nextLine = trim($lines[$lookAhead]);
+                    if (empty($nextLine) || preg_match('/^#/', $nextLine)) {
+                        $lookAhead++;
+                        continue;
+                    }
+                    if (preg_match('/^msgid\s+""?\s*$/', $nextLine)) {
+                        $headerFuzzyRemoved = true;
+                        continue 2;
+                    }
+                    break;
+                }
+            }
+            
+            $cleanedLines[] = $line;
+        }
+        
+        $cleanedContent = implode("\n", $cleanedLines);
+        if ($cleanedContent !== $content) {
+            file_put_contents($poFilePath, $cleanedContent);
+        }
+    }
+    
+    /**
      * Upload PO file for a language
      *
      * @param string $projectSlug
@@ -301,8 +662,10 @@ class WeblateClient
             try {
                 $weblateLanguage = $this->mapLanguageCode($language);
 
+                $this->cleanupDuplicatePoHeaders($poFilePath);
+                $this->removeDuplicateReferences($poFilePath);
+                $this->removeFuzzyFromPoHeader($poFilePath);
                 $this->normalizePluralFormsForWeblate($language, $poFilePath);
-                $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
 
                 $response = $this->client->post(
                     "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
@@ -321,8 +684,23 @@ class WeblateClient
                 );
 
                 return $response->getStatusCode() === 200;
+
             } catch (GuzzleException $e) {
                 $attempt++;
+
+                $is404 = false;
+                if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                    $is404 = $e->getResponse()->getStatusCode() === 404;
+                }
+                
+                if ($is404 && $attempt === 1) {
+                    try {
+                        $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
+                        continue;
+                    } catch (Exception $createError) {
+                        throw $e;
+                    }
+                }
 
                 $isTimeout = $e->getCode() === 28
                     || strpos($e->getMessage(), 'cURL error 28') !== false;
@@ -402,142 +780,81 @@ class WeblateClient
             return;
         }
 
-        if (
-            strpos($contents, 'Plural-Forms:') === false &&
-            strpos($contents, 'msgid_plural') === false
-        ) {
+        if (!preg_match('/msgid\s+""\s+msgstr\s+""(.*?)\n\n/s', $contents, $m)) {
             return;
         }
 
-        if ($languageCode === 'ja') {
-            // For Japanese, remove any explicit Plural-Forms and let Weblate use its own rule.
-            $contents = preg_replace(
-                '/"Plural-Forms:[^"]*\\\\n"\s*\r?\n?/',
-                '',
-                $contents,
-                1
-            );
-        } else {
-            $expectedLine = '"Plural-Forms: ' . $expected . "\\n" . '"';
+        $headerBlock = $m[1];
 
-            if (
-                strpos($contents, $expectedLine) !== false &&
-                strpos($contents, 'msgid_plural') === false
-            ) {
-                return;
-            }
+        preg_match_all('/"([^"]*)"/', $headerBlock, $matches);
+        $headers = $matches[1];
 
-            if (strpos($contents, 'Plural-Forms:') !== false) {
-                $contents = preg_replace(
-                    '/"Plural-Forms:[^"]*\\\\n"/',
-                    $expectedLine,
-                    $contents,
-                    1
-                );
-            } else {
-                if (strpos($contents, 'Language:') !== false) {
-                    $contents = preg_replace(
-                        '/("Language:[^"\\n]*\\n")/',
-                        "$1\n" . $expectedLine,
-                        $contents,
-                        1
-                    );
-                } else {
-                    // If neither Plural-Forms nor Language is found, do not write back the file.
-                    return;
-                }
-            }
-        }
+        $normalizedLanguage = str_replace('-', '_', $languageCode);
+        $cleanHeaders = [];
+        foreach ($headers as $h) {
 
-        $nplurals = 1;
-        if (preg_match('/nplurals\s*=\s*(\d+)/', $expected, $m)) {
-            $nplurals = max(1, (int) $m[1]);
-        }
-
-        $lines     = preg_split("/(\r\n|\n|\r)/", $contents);
-        $newLines  = [];
-        $lineCount = count($lines);
-
-        for ($i = 0; $i < $lineCount; $i++) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid_plural\s+"(.+)"$/', $line)) {
-
-                if ($languageCode === 'ja') {
-                    $j = $i + 1;
-
-                    while (
-                        $j < $lineCount &&
-                        !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
-                        !preg_match('/^msgid\s+"/', $lines[$j])
-                    ) {
-                        $j++;
-                    }
-
-                    $translation = '';
-                    if (
-                        $j < $lineCount &&
-                        preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $lines[$j], $mStr)
-                    ) {
-                        $translation = $mStr[1];
-                    }
-
-                    $newLines[] = 'msgstr "' . $translation . '"';
-
-                    $k = $j + 1;
-                    while (
-                        $k < $lineCount &&
-                        preg_match('/^msgstr\[\d+\]\s+"/', $lines[$k])
-                    ) {
-                        $k++;
-                    }
-
-                    $i = $k - 1;
-                    continue;
-                }
-
-                $newLines[] = $line;
-                $j = $i + 1;
-
-                while (
-                    $j < $lineCount &&
-                    !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j]) &&
-                    !preg_match('/^msgid\s+"/', $lines[$j])
-                ) {
-                    $newLines[] = $lines[$j];
-                    $j++;
-                }
-
-                if ($j >= $lineCount || !preg_match('/^msgstr\[\d+\]\s+"/', $lines[$j])) {
-                    $i = $j - 1;
-                    continue;
-                }
-
-                $values = [];
-                $k      = $j;
-
-                while (
-                    $k < $lineCount &&
-                    preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$k], $mStr)
-                ) {
-                    $values[(int) $mStr[1]] = $mStr[2];
-                    $k++;
-                }
-
-                for ($idx = 0; $idx < $nplurals; $idx++) {
-                    $val = isset($values[$idx]) ? $values[$idx] : '';
-                    $newLines[] = 'msgstr[' . $idx . '] "' . $val . '"';
-                }
-
-                $i = $k - 1;
+            if (stripos($h, 'Plural-Forms:') === 0) {
                 continue;
             }
 
-            $newLines[] = $line;
+            if (stripos($h, 'Language:') === 0) {
+                $cleanHeaders[] = 'Language: ' . $normalizedLanguage . '\n';
+                continue;
+            }
+
+            $cleanHeaders[] = $h;
         }
 
-        $normalized = implode("\n", $newLines);
-        @file_put_contents($poFilePath, $normalized);
+        if ($languageCode !== 'ja') {
+            $cleanHeaders[] = "Plural-Forms: {$expected}\\n";
+        }
+
+        $newHeader = "";
+        foreach ($cleanHeaders as $h) {
+            $newHeader .= '"' . $h . '"' . "\n";
+        }
+
+        $contents = preg_replace(
+            '/msgid\s+""\s+msgstr\s+""(.*?)\n\n/s',
+            "msgid \"\"\nmsgstr \"\"\n" . $newHeader . "\n",
+            $contents,
+            1
+        );
+
+        $nplurals = 1;
+        if (preg_match('/nplurals\s*=\s*(\d+)/', $expected, $m2)) {
+            $nplurals = max(1, (int)$m2[1]);
+        }
+
+        $lines = explode("\n", $contents);
+        $out = [];
+        $count = count($lines);
+
+        for ($i = 0; $i < $count; $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid_plural/', $line)) {
+                $out[] = $line;
+                $j = $i + 1;
+
+                $vals = [];
+                while ($j < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$j], $mm)) {
+                    $vals[(int)$mm[1]] = $mm[2];
+                    $j++;
+                }
+
+                for ($idx = 0; $idx < $nplurals; $idx++) {
+                    $out[] = 'msgstr[' . $idx . '] "' . ($vals[$idx] ?? '') . '"';
+                }
+
+                $i = $j - 1;
+                continue;
+            }
+
+            $out[] = $line;
+        }
+
+        file_put_contents($poFilePath, implode("\n", $out));
     }
 
     /**
@@ -555,6 +872,15 @@ class WeblateClient
             'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
             'ja'    => 'nplurals=1; plural=0;',
             'yo'    => 'nplurals=1; plural=0;',
+            'fil'   => 'nplurals=2; plural=n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9);',
+            'fa'    => 'nplurals=2; plural=(n > 1);',
+            'fa_IR' => 'nplurals=2; plural=(n > 1);',
+            'fr_FR' => 'nplurals=2; plural=(n > 1);',
+            'pt'    => 'nplurals=2; plural=n > 1;',
+            'pt_PT' => 'nplurals=2; plural=n > 1;',
+            'tr'    => 'nplurals=2; plural=(n != 1);',
+            'tr_TR' => 'nplurals=2; plural=(n != 1);',
+
         ];
 
         return isset($map[$languageCode]) ? $map[$languageCode] : null;
@@ -583,6 +909,7 @@ class WeblateClient
                 );
 
                 return $response->getBody()->getContents();
+
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -624,4 +951,50 @@ class WeblateClient
             throw new Exception("Error getting component stats: " . $e->getMessage());
         }
     }
+
+    public function getComponentLanguages($projectSlug, $componentSlug)
+    {
+        $languages = [];
+        $url = "components/{$projectSlug}/{$componentSlug}/translations/";
+
+        try {
+            while ($url) {
+                $response = $this->client->get($url);
+                $data = json_decode($response->getBody()->getContents(), true);
+
+                if (isset($data['results']) && is_array($data['results'])) {
+                    foreach ($data['results'] as $translation) {
+                        if (isset($translation['language_code'])) {
+                            $languages[] = $translation['language_code'];
+                        } elseif (
+                            isset($translation['language']) &&
+                            is_array($translation['language']) &&
+                            isset($translation['language']['code'])
+                        ) {
+                            $languages[] = $translation['language']['code'];
+                        }
+                    }
+                }
+
+                // Handle pagination
+                if (!empty($data['next'])) {
+                    $next = $data['next'];
+                    if (strpos($next, $this->apiUrl) === 0) {
+                        $url = substr($next, strlen($this->apiUrl));
+                    } else {
+                        $url = $next;
+                    }
+                } else {
+                    $url = null;
+                }
+            }
+
+            $languages = array_values(array_unique($languages));
+
+            return $languages;
+        } catch (GuzzleException $e) {
+            throw new Exception("Error getting component languages: " . $e->getMessage());
+        }
+    }
+
 }
