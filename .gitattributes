@@ -27,7 +27,7 @@ behat.yml export-ignore
 builder.yml export-ignore
 circle.yml export-ignore
 codeception.yml export-ignore
-composer.json export-ignore
+/composer.json export-ignore
 composer.lock export-ignore
 docker-compose.yml export-ignore
 Gruntfile.js export-ignore
@@ -37,7 +37,7 @@ multisite.xml export-ignore
 multisite.xml.dist export-ignore
 node_modules export-ignore
 package-lock.json export-ignore
-package.json export-ignore
+/package.json export-ignore
 phpcs.ruleset.xml export-ignore
 phpcs.xml export-ignore
 phpcs.xml.dist export-ignore
