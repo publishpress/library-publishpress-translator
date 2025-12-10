@@ -417,7 +417,7 @@ class Translator
             echo "  ✓ All translations uploaded\n";
         }
 
-        echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+        echo "  View at: https://weblate.publishpress.com/projects/{$projectSlug}/{$componentSlug}/\n\n";
     }
 
     /**

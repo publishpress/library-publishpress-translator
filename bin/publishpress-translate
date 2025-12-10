@@ -101,7 +101,7 @@ Environment Variables:
 
 Workflow:
   1. Generate translations:  publishpress-translate
-  2. Review in Weblate:      https://hosted.weblate.org/
+  2. Review in Weblate:      https://weblate.publishpress.com/
   3. Download updates:       publishpress-translate --download
   4. Build plugin with translations in /languages folder
 
