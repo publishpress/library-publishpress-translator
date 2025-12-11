@@ -18,7 +18,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 - PHP 7.2.5 or higher
 - Node.js 18+ and npm (for Potomatic CLI tool)
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
-- Weblate account and API token ([Sign up here](https://hosted.weblate.org/))
+- Weblate account and API token ([Sign up here](https://weblate.publishpress.com/))
 - Plugin must have a `languages/` directory with `.pot` files
 
 ## Installation
@@ -107,8 +107,8 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
 **Get your Weblate API token:**
-1. Sign up at [hosted.weblate.org](https://hosted.weblate.org/)
-2. Go to your profile: https://hosted.weblate.org/accounts/profile/#api
+1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)
+2. Go to your profile: https://weblate.publishpress.com/accounts/profile/#api
 3. Copy your personal API key
 
 ### Additional configuration
@@ -126,7 +126,7 @@ The following environment variables control advanced behaviour:
   - You can still generate local translations.
   - Upload/download with Weblate will be skipped and a warning will be printed.
 
-- **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
+- **`WEBLATE_API_URL`** (optional, default: `https://weblate.publishpress.com/api/`)
   Override this if you use a self-hosted Weblate instance.
 
 - **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)
@@ -175,7 +175,7 @@ This ensures:
 #### 2. Review & Improve in Weblate
 
 After running translate, we then can:
-1. Visit https://hosted.weblate.org/projects/YOUR-PLUGIN/
+1. Visit https://weblate.publishpress.com/projects/YOUR-PLUGIN/
 2. Review and improve AI-generated translations
 3. Use Weblate's translation memory and suggestions
 4. Collaborate with community translators
