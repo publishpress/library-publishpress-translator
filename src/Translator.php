@@ -44,6 +44,13 @@ class Translator
     ];
 
     /**
+     * True if languages were explicitly set (via CLI --languages)
+     * @var bool
+    */
+    private $customTargetLanguages = false;
+
+    
+    /**
      * Dry run mode
      *
      * @var bool
@@ -148,6 +155,7 @@ class Translator
     public function setTargetLanguages(array $languages)
     {
         $this->targetLanguages = $languages;
+        $this->customTargetLanguages = true;
     }
 
     /**
@@ -159,7 +167,23 @@ class Translator
     {
         $this->weblateEnabled = (bool) $enabled;
     }
+    
+    /**
+     * Reverse-map Weblate language codes to WordPress locale codes
+     *
+     * @param string $weblateCode
+     * @return string
+     */
+    private function reverseMapWeblateLanguage($weblateCode)
+    {
+        $reverseMap = [
+            'zh_Hans' => 'zh_CN',
+            'zh_Hant' => 'zh_TW',
+        ];
 
+        return $reverseMap[$weblateCode] ?? $weblateCode;
+    }
+    
     /**
      * Get plugin name from directory
      *
@@ -347,20 +371,21 @@ class Translator
         }
 
         echo "\n Uploading to Weblate...\n";
-
-        $pluginSlug = $this->getPluginSlug();
-        $projectSlug = $this->getWeblateProjectSlug();
-        $componentSlug = $textDomain;
-
+        
+        $pluginSlug   = $this->getPluginSlug();
+        $projectSlug  = $this->getWeblateProjectSlug();
+        $componentSlug = $this->getWeblateComponentSlug($textDomain);
+        
         // Step 1: Ensure project exists
         echo "  • Checking project '{$projectSlug}'...\n";
         if (!$this->weblateClient->projectExists($projectSlug)) {
             echo "  • Creating project '{$projectSlug}'...\n";
-            $this->weblateClient->createProject($projectSlug, $pluginSlug);
+            $this->weblateClient->createProject($projectSlug, $pluginSlug, $this->getGitRepoUrl());
         }
 
         // Step 2: Ensure component exists, auto-create if needed
         echo "  • Checking component '{$componentSlug}'...\n";
+
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
             echo "  • Creating component '{$componentSlug}'...\n";
             try {
@@ -373,18 +398,61 @@ class Translator
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
-                throw new Exception("Failed to create component: " . $e->getMessage());
+                $message = $e->getMessage();
+
+                if (strpos($message, 'Your push URL seems to miss credentials') !== false) {
+                    $message .= "\n\n";
+                    $message .= "This usually happens when using a private Git repository without an authenticated URL.\n";
+                    $message .= "You can fix this by configuring Weblate repo URLs via environment variables, for example:\n";
+                    $message .= "  - Set WEBLATE_REPO_URL to a credentialed HTTPS or SSH URL (e.g. git@github.com:repository/repository-name.git)\n";
+                    $message .= "  - Optionally set WEBLATE_PUSH_URL if push should differ from repo\n";
+                    $message .= "  - Or set WEBLATE_REPO_TYPE=ssh and configure an SSH key for this repo in Weblate\n";
+                    $message .= "  - Or set WEBLATE_SKIP_VCS=true to create components without VCS integration\n";
+                }
+
+                throw new Exception("Failed to create component: " . $message);
             }
         }
 
-        // Step 3: Upload all PO files from local languages directory
-        echo "  • Uploading translation files...\n";
-        $poFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
+        echo "  • Uploading POT file (source strings)...\n";
+        try {
+            $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+            echo "  ✓ POT file uploaded\n";
+        } catch (Exception $e) {
+            echo "  ⚠️  Warning: POT upload failed: " . $e->getMessage() . "\n";
+            echo "  Continuing with PO file uploads...\n";
+        }
 
+        // Step 3: Upload PO files
+        echo "  • Uploading translation files...\n";
+        
+        // Get all PO files
+        $allPoFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
+        
+        // Filter by target languages if custom languages were specified
+        $poFilesToUpload = [];
+        if ($this->customTargetLanguages) {
+            foreach ($allPoFiles as $poFile) {
+                preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
+                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages)) {
+                    $poFilesToUpload[] = $poFile;
+                }
+            }
+            
+            if (empty($poFilesToUpload)) {
+                echo "  ⚠️  No PO files found matching specified languages: " . implode(', ', $this->targetLanguages) . "\n";
+                return;
+            }
+            
+            echo "  • Uploading " . count($poFilesToUpload) . " language(s): " . implode(', ', $this->targetLanguages) . "\n";
+        } else {
+            $poFilesToUpload = $allPoFiles;
+        }
+        
         $uploadedCount = 0;
         $failedCount = 0;
-
-        foreach ($poFiles as $poFile) {
+        
+        foreach ($poFilesToUpload as $poFile) {
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
             if (!isset($matches[1])) {
                 continue;
@@ -395,6 +463,7 @@ class Translator
             echo "    → Preparing {$languageCode}\n";
 
             try {
+                $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
                 echo "    ✓ Uploaded {$languageCode}\n";
                 $uploadedCount++;
@@ -540,6 +609,22 @@ class Translator
     }
 
     /**
+     * Get Weblate component slug from environment or text domain
+     *
+     * @param string $textDomain
+     * @return string
+     */
+    private function getWeblateComponentSlug($textDomain)
+    {
+        $componentSlug = getenv('WEBLATE_COMPONENT_SLUG');
+        if ($componentSlug) {
+            return $componentSlug;
+        }
+
+        return $textDomain;
+    }
+    
+    /**
      * Download translations from Weblate
      *
      * @param bool $silent If true, suppress output messages
@@ -573,21 +658,25 @@ class Translator
             }
             return false;
         }
-
+        
+        echo "📤 Downloading translations from Weblate...\n";
+        echo "POT files found: " . count($potFiles) . "\n\n";
+        
         $success = true;
         $totalDownloaded = 0;
 
         foreach ($potFiles as $potFile) {
             $potFileName = basename($potFile);
             $textDomain = str_replace('.pot', '', $potFileName);
-
+            $componentSlug = $this->getWeblateComponentSlug($textDomain);
+            
             if (!$silent) {
-                echo "Component: {$textDomain}\n";
+                echo "Component: {$componentSlug}\n";
             }
 
             // Check if component exists
             try {
-                if (!$this->weblateClient->componentExists($projectSlug, $textDomain)) {
+                if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
                     if (!$silent) {
                         fwrite(STDERR, "  ⚠️  Component not found on Weblate, skipping...\n\n");
                     }
@@ -601,19 +690,42 @@ class Translator
                 continue;
             }
 
-            // Download translations for each target language
-            foreach ($this->targetLanguages as $language) {
+            $languagesToDownload = [];
+
+            if ($this->customTargetLanguages) {
+                $languagesToDownload = $this->targetLanguages;
+            } else {
                 try {
-                    echo "    → Downloading {$language}\n";
+                    $languagesToDownload = $this->weblateClient->getComponentLanguages($projectSlug, $componentSlug);
+                } catch (Exception $e) {
+                    if (!$silent) {
+                        fwrite(STDERR, "  ❌ Error fetching language list from Weblate: " . $e->getMessage() . "\n");
+                        fwrite(STDERR, "  ⚠️ Falling back to default targetLanguages list\n");
+                    }
+                    $languagesToDownload = $this->targetLanguages;
+                }
+            }
 
-                    $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
+                        
+            // Download translations for each language
+            foreach ($languagesToDownload as $language) {
+                try {
+                    if (!$silent) {
+                        echo "    → Downloading {$language}\n";
+                    }
 
+                    $poContent = $this->weblateClient->downloadPo($projectSlug, $componentSlug, $language);
+                    
                     if ($poContent) {
-                        $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
+                        $wpLocale = $this->reverseMapWeblateLanguage($language);
+                        
+                        $poFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.po';
                         file_put_contents($poFile, $poContent);
                         chmod($poFile, 0644);
 
-                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
+                        $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        
+                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
 
                         if (!$silent) {
@@ -889,6 +1001,7 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
+                        $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
                     }
 
@@ -897,6 +1010,7 @@ class Translator
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
                     $success = false;
                 }
+                
             } catch (Exception $e) {
                 fwrite(STDERR, "\n❌ Error: " . $e->getMessage() . "\n\n");
                 $success = false;
