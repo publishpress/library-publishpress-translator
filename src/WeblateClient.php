@@ -164,77 +164,138 @@ class WeblateClient
      */
     public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
+        $skipVcs = getenv('WEBLATE_SKIP_VCS') === 'true' || getenv('WEBLATE_SKIP_VCS') === '1';
+        
         try {
             $potContent = file_get_contents($potFilePath);
             if ($potContent === false) {
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
-            
-            $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
 
-            $overrideRepoUrl = getenv('WEBLATE_REPO_URL') ?: null;
-            $overridePushUrl = getenv('WEBLATE_PUSH_URL') ?: null;
-
-            if ($overrideRepoUrl) {
-                $repoUrl = $overrideRepoUrl;
-
-                if ($overridePushUrl !== null) {
-                    $pushUrl = $overridePushUrl;
-                } else {
-                    if (strpos($overrideRepoUrl, 'git@') === 0 || strpos($overrideRepoUrl, '@github.com:') !== false) {
-                        $pushUrl = $overrideRepoUrl;
-                    } else {
-                        $pushUrl = '';
-                    }
-                }
-
-            } else {
-
-                if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
-
-                    if (
-                        $repoType === 'ssh'
-                        && preg_match('#^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#', $gitRepoSlug, $matches)
-                    ) {
-                        $owner = $matches[1];
-                        $name  = $matches[2];
-                        $repoUrl = "git@github.com:{$owner}/{$name}.git";
-                        $pushUrl = $repoUrl;
-                    } else {
-                        $repoUrl = $gitRepoSlug;
-                        $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
-                    }
-
-                } else {
-                    $repoSlug = $gitRepoSlug ?: $componentSlug;
-
-                    if ($repoType === 'ssh') {
-                        $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                        $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                    } else {
-                        $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                        $pushUrl = '';
-                    }
-                }
-            }
+            $componentData = [
+                'name' => $componentName,
+                'slug' => $componentSlug,
+                'file_format' => 'po',
+                'manage_units' => false,
+            ];
 
             $branch = getenv('WEBLATE_GIT_BRANCH') ?: 'development';
+            
+            if ($skipVcs) {
+                $zipPath = sys_get_temp_dir() . '/' . $componentSlug . '-' . time() . '.zip';
+                $zip = new \ZipArchive();
+                
+                if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
+                    throw new Exception("Failed to create ZIP file for component creation");
+                }
+
+                $zip->addFile($potFilePath, basename($potFilePath));
+                
+                // Create a dummy en.po file so Weblate can detect the language pattern
+                $potContent = file_get_contents($potFilePath);
+                $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en.po';
+                file_put_contents($dummyPoPath, $potContent);
+                $zip->addFile($dummyPoPath, $componentSlug . '-en.po');
+                
+                $zip->close();
+                
+                // Clean up temp PO file
+                @unlink($dummyPoPath);
+                
+                $componentData['repo'] = 'local:';
+                $componentData['vcs'] = 'local';
+                $componentData['branch'] = $branch;
+                $componentData['file_format'] = 'po';
+                $componentData['filemask'] = $componentSlug . '-*.po';
+                $componentData['new_lang'] = 'add';
+                $componentData['new_base'] = basename($potFilePath);
+                
+                // Use multipart form data with zipfile
+                $response = $this->client->post("projects/{$projectSlug}/components/", [
+                    'multipart' => [
+                        ['name' => 'name', 'contents' => $componentName],
+                        ['name' => 'slug', 'contents' => $componentSlug],
+                        ['name' => 'file_format', 'contents' => 'po'],
+                        ['name' => 'filemask', 'contents' => $componentSlug . '-*.po'],
+                        ['name' => 'repo', 'contents' => 'local:'],
+                        ['name' => 'vcs', 'contents' => 'local'],
+                        ['name' => 'branch', 'contents' => $branch],
+                        ['name' => 'new_lang', 'contents' => 'add'],
+                        ['name' => 'new_base', 'contents' => basename($potFilePath)],
+                        ['name' => 'manage_units', 'contents' => 'false'],
+                        [
+                            'name' => 'zipfile',
+                            'contents' => fopen($zipPath, 'r'),
+                            'filename' => basename($zipPath)
+                        ],
+                    ]
+                ]);
+                
+                // Clean up temp ZIP file
+                @unlink($zipPath);
+                
+                $result = json_decode($response->getBody()->getContents(), true);
+                return $result;
+            } else {
+                $componentData['filemask'] = "languages/{$componentSlug}-*.po";
+                $componentData['new_base'] = "languages/{$componentSlug}.pot";
+                $componentData['new_lang'] = 'add';
+                $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
+                $overrideRepoUrl = getenv('WEBLATE_REPO_URL') ?: null;
+                $overridePushUrl = getenv('WEBLATE_PUSH_URL') ?: null;
+
+                if ($overrideRepoUrl) {
+                    $repoUrl = $overrideRepoUrl;
+
+                    if ($overridePushUrl !== null) {
+                        $pushUrl = $overridePushUrl;
+                    } else {
+                        if (strpos($overrideRepoUrl, 'git@') === 0 || strpos($overrideRepoUrl, '@github.com:') !== false) {
+                            $pushUrl = $overrideRepoUrl;
+                        } else {
+                            $pushUrl = '';
+                        }
+                    }
+
+                } else {
+
+                    if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+
+                        if (
+                            $repoType === 'ssh'
+                            && preg_match('#^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#', $gitRepoSlug, $matches)
+                        ) {
+                            $owner = $matches[1];
+                            $name  = $matches[2];
+                            $repoUrl = "git@github.com:{$owner}/{$name}.git";
+                            $pushUrl = $repoUrl;
+                        } else {
+                            $repoUrl = $gitRepoSlug;
+                            $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
+                        }
+
+                    } else {
+                        $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                        if ($repoType === 'ssh') {
+                            $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                            $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                        } else {
+                            $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                            $pushUrl = '';
+                        }
+                    }
+                }
+                
+                $componentData['repo'] = $repoUrl;
+                $componentData['branch'] = $branch;
+                $componentData['push'] = $pushUrl;
+                $componentData['vcs'] = 'git';
+                $componentData['update_on_commit'] = false;
+            }
 
             $response = $this->client->post("projects/{$projectSlug}/components/", [
-                'json' => [
-                    'name' => $componentName,
-                    'slug' => $componentSlug,
-                    'repo' => $repoUrl,
-                    'branch' => $branch,
-                    'push' => $pushUrl,
-                    'vcs' => 'git',
-                    'file_format' => 'po',
-                    'filemask' => "languages/{$componentSlug}-*.po",
-                    'new_base' => "languages/{$componentSlug}.pot",
-                    'new_lang' => 'add',
-                    'manage_units' => false,
-                    'update_on_commit' => false,
-                ]
+                'json' => $componentData
             ]);
 
             $result = json_decode($response->getBody()->getContents(), true);
@@ -245,13 +306,22 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, '"code":"invalid"') !== false &&
-                strpos($errorBody, '"attr":"name"') !== false &&
-                strpos($errorBody, 'Component or category with the same name already exists at this level.') !== false) {
-                return [
-                    'slug' => $componentSlug,
-                    'name' => $componentName,
-                ];
+            if (strpos($errorBody, 'requires authentication') !== false || 
+                strpos($errorBody, '"attr":"repo"') !== false) {
+                
+                if ($skipVcs) {
+                    throw new Exception("Error creating component with local VCS: " . $e->getMessage() . "\n" . $errorBody);
+                }
+                
+                $helpMessage = "Error creating component: Repository requires authentication.\n\n";
+                $helpMessage .= "Options to fix this:\n";
+                $helpMessage .= "  1. Set WEBLATE_SKIP_VCS=true to create components without VCS integration\n";
+                $helpMessage .= "  2. Configure Git credentials:\n";
+                $helpMessage .= "     - Set WEBLATE_REPO_URL to a credentialed HTTPS URL (e.g., https://username:token@github.com/owner/repo.git)\n";
+                $helpMessage .= "     - Or set WEBLATE_REPO_TYPE=ssh and configure SSH keys in Weblate\n";
+                $helpMessage .= "     - Or set WEBLATE_REPO_URL to an SSH URL (e.g., git@github.com:owner/repo.git)\n\n";
+                $helpMessage .= "Original error: " . $e->getMessage() . "\n" . $errorBody;
+                throw new Exception($helpMessage);
             }
 
             throw new Exception("Error creating component: " . $e->getMessage() . "\n" . $errorBody);
@@ -427,6 +497,23 @@ class WeblateClient
             'es_CO'         => 'es_CO',
             'es_MX'         => 'es_MX',
             'es_ES'         => 'es',
+
+            'bg_BG' => 'bg',
+            'cs_CZ' => 'cs',
+            'da_DK' => 'da',
+            'fr_FR' => 'fr',
+            'hu_HU' => 'hu',
+            'id_ID' => 'id',
+            'it_IT' => 'it',
+            'ko_KR' => 'ko',
+            'lt_LT' => 'lt',
+            'pl_PL' => 'pl',
+            'ro_RO' => 'ro',
+            'ru_RU' => 'ru',
+            'sk_SK' => 'sk',
+            'sl_SI' => 'sl',
+            'sv_SE' => 'sv',
+            'tr_TR' => 'tr',
         ];
 
         // If there's a special mapping, use it
@@ -735,16 +822,18 @@ class WeblateClient
      * @return void
      * @throws Exception
      */
-    private function ensureTranslation($projectSlug, $componentSlug, $language)
+    public function ensureTranslation($projectSlug, $componentSlug, $language)
     {
+        $code = $this->mapLanguageCode($language);
+
         try {
-            $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$language}/");
+            $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$code}/");
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
                 try {
                     $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
                         'json' => [
-                            'language_code' => $language,
+                            'language_code' => $code,
                         ]
                     ]);
                 } catch (GuzzleException $createError) {
@@ -752,10 +841,10 @@ class WeblateClient
                     if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
                         $errorBody = $createError->getResponse()->getBody()->getContents();
                     }
-                    throw new Exception("Error creating translation for {$language}: " . $createError->getMessage() . "\n" . $errorBody);
+                    throw new Exception("Error creating translation for {$language} (mapped: {$code}): " . $createError->getMessage() . "\n" . $errorBody);
                 }
             } else {
-                throw new Exception("Error checking translation for {$language}: " . $e->getMessage());
+                throw new Exception("Error checking translation for {$language} (mapped: {$code}): " . $e->getMessage());
             }
         }
     }

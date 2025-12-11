@@ -385,17 +385,8 @@ class Translator
 
         // Step 2: Ensure component exists, auto-create if needed
         echo "  • Checking component '{$componentSlug}'...\n";
-        $skipVcs = getenv('WEBLATE_SKIP_VCS') === 'true' || getenv('WEBLATE_SKIP_VCS') === '1';
 
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
-            if ($skipVcs) {
-                throw new Exception(
-                    "Component '{$componentSlug}' does not exist.\n" .
-                    "For WEBLATE_SKIP_VCS mode, please create the component manually in Weblate UI:\n" .
-                    "https://hosted.weblate.org/projects/{$projectSlug}/"
-                );
-            }
-            
             echo "  • Creating component '{$componentSlug}'...\n";
             try {
                 $this->weblateClient->createComponent(
@@ -416,6 +407,7 @@ class Translator
                     $message .= "  - Set WEBLATE_REPO_URL to a credentialed HTTPS or SSH URL (e.g. git@github.com:repository/repository-name.git)\n";
                     $message .= "  - Optionally set WEBLATE_PUSH_URL if push should differ from repo\n";
                     $message .= "  - Or set WEBLATE_REPO_TYPE=ssh and configure an SSH key for this repo in Weblate\n";
+                    $message .= "  - Or set WEBLATE_SKIP_VCS=true to create components without VCS integration\n";
                 }
 
                 throw new Exception("Failed to create component: " . $message);
@@ -471,6 +463,7 @@ class Translator
             echo "    → Preparing {$languageCode}\n";
 
             try {
+                $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
                 echo "    ✓ Uploaded {$languageCode}\n";
                 $uploadedCount++;
@@ -493,7 +486,7 @@ class Translator
             echo "  ✓ All translations uploaded\n";
         }
 
-        echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+        echo "  View at: https://weblate.publishpress.com/projects/{$projectSlug}/{$componentSlug}/\n\n";
     }
 
     /**
