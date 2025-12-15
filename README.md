@@ -84,8 +84,8 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
 **Get your Weblate API token:**
-1. Sign up at [hosted.weblate.org](https://hosted.weblate.org/)
-2. Go to your profile: https://hosted.weblate.org/accounts/profile/#api
+1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)
+2. Go to your profile: https://weblate.publishpress.com/accounts/profile/#api
 3. Copy your personal API key
 
 ### Additional configuration

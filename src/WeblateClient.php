@@ -44,14 +44,14 @@ class WeblateClient
      */
     public function __construct($apiUrl = null, $apiToken = null)
     {
-        $this->apiUrl = $apiUrl ?: getenv('WEBLATE_API_URL') ?: 'https://hosted.weblate.org/api/';
+        $this->apiUrl = $apiUrl ?: getenv('WEBLATE_API_URL') ?: 'https://weblate.publishpress.com/api/';
         $this->apiToken = $apiToken ?: getenv('WEBLATE_API_TOKEN');
 
         if (!$this->apiToken) {
             throw new Exception(
                 "Weblate API token not found.\n" .
                     "Please set WEBLATE_API_TOKEN environment variable.\n" .
-                    "Get your token from: https://hosted.weblate.org/accounts/profile/#api"
+                    "Get your token from: https://weblate.publishpress.com/accounts/profile/#api"
             );
         }
 
