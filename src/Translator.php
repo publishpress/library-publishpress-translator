@@ -1001,7 +1001,9 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
-                        $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        if ($this->weblateClient) {
+                            $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        }
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
                     }
 
