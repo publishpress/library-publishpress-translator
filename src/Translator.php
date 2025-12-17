@@ -918,6 +918,8 @@ class Translator
                 }
             }
 
+            $this->cleanupDuplicateLocaleFiles($textDomain, $silent);
+
             if (!$silent) {
                 echo "\n";
             }
@@ -929,6 +931,80 @@ class Translator
         }
 
         return $success;
+    }
+
+    private function cleanupDuplicateLocaleFiles(string $textDomain, bool $silent = false): void
+    {
+        $preferBase = getenv('WEBLATE_PREFER_BASE_LANGUAGE') === 'true' || getenv('WEBLATE_PREFER_BASE_LANGUAGE') === '1';
+
+        $allPo = glob($this->languagesDir . "/{$textDomain}-*.po") ?: [];
+        $allMo = glob($this->languagesDir . "/{$textDomain}-*.mo") ?: [];
+
+        $byLocale = [];
+        foreach ($allPo as $poPath) {
+            $baseName = basename($poPath);
+            if (!preg_match('/^' . preg_quote($textDomain, '/') . '-(.+)\\.po$/', $baseName, $m)) {
+                continue;
+            }
+
+            $locale = $m[1];
+            $byLocale[$locale]['po'] = $poPath;
+        }
+
+        foreach ($allMo as $moPath) {
+            $baseName = basename($moPath);
+            if (!preg_match('/^' . preg_quote($textDomain, '/') . '-(.+)\\.mo$/', $baseName, $m)) {
+                continue;
+            }
+
+            $locale = $m[1];
+            $byLocale[$locale]['mo'] = $moPath;
+        }
+
+        $localesByBase = [];
+        foreach (array_keys($byLocale) as $locale) {
+            $base = strtolower(explode('_', $locale, 2)[0]);
+            $localesByBase[$base][] = $locale;
+        }
+
+        $toDeleteLocales = [];
+
+        foreach ($localesByBase as $base => $locales) {
+            $hasBase = in_array($base, $locales, true);
+            if (!$hasBase) {
+                continue;
+            }
+
+            $regionals = array_values(array_filter($locales, static function ($l) use ($base) {
+                return $l !== $base;
+            }));
+
+            if (empty($regionals)) {
+                continue;
+            }
+
+            if ($preferBase) {
+                foreach ($regionals as $regional) {
+                    $toDeleteLocales[] = $regional;
+                }
+            } else {
+                $toDeleteLocales[] = $base;
+            }
+        }
+
+        $toDeleteLocales = array_values(array_unique($toDeleteLocales));
+        foreach ($toDeleteLocales as $locale) {
+            if (isset($byLocale[$locale]['po'])) {
+                @unlink($byLocale[$locale]['po']);
+            }
+            if (isset($byLocale[$locale]['mo'])) {
+                @unlink($byLocale[$locale]['mo']);
+            }
+
+            if (!$silent) {
+                echo "    ⊘ Removed duplicate {$locale}\n";
+            }
+        }
     }
 
     /**
