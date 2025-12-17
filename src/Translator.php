@@ -185,6 +185,72 @@ class Translator
     }
     
     /**
+     * Dedupe Weblate language codes
+     *
+     * @param array $languageCodes
+     * @return array
+     */
+    private function dedupeWeblateLanguageCodes(array $languageCodes)
+    {
+        $preferBase = getenv('WEBLATE_PREFER_BASE_LANGUAGE') === 'true' || getenv('WEBLATE_PREFER_BASE_LANGUAGE') === '1';
+
+        $byBase = [];
+        foreach ($languageCodes as $code) {
+            $normalized = str_replace('-', '_', (string) $code);
+            $base = strtolower(explode('_', $normalized, 2)[0]);
+
+            if (!isset($byBase[$base])) {
+                $byBase[$base] = [
+                    'base' => null,
+                    'regional' => [],
+                ];
+            }
+
+            if (strpos($normalized, '_') === false) {
+                $byBase[$base]['base'] = $code;
+            } else {
+                $byBase[$base]['regional'][] = $code;
+            }
+        }
+
+        $keep = [];
+        foreach ($byBase as $group) {
+            $hasBase = $group['base'] !== null;
+            $hasRegional = !empty($group['regional']);
+
+            if ($hasBase && $hasRegional) {
+                if ($preferBase) {
+                    $keep[(string) $group['base']] = true;
+                } else {
+                    $regional = $group['regional'];
+                    sort($regional);
+                    $keep[(string) $regional[0]] = true;
+                }
+                continue;
+            }
+
+            if ($hasBase) {
+                $keep[(string) $group['base']] = true;
+            }
+
+            if ($hasRegional) {
+                foreach ($group['regional'] as $regionalCode) {
+                    $keep[(string) $regionalCode] = true;
+                }
+            }
+        }
+
+        $result = [];
+        foreach ($languageCodes as $code) {
+            if (isset($keep[(string) $code])) {
+                $result[] = $code;
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    /**
      * Get plugin name from directory
      *
      * @return string
@@ -658,10 +724,10 @@ class Translator
             }
             return false;
         }
-        
+
         echo "📤 Downloading translations from Weblate...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
-        
+
         $success = true;
         $totalDownloaded = 0;
 
@@ -672,6 +738,16 @@ class Translator
             
             if (!$silent) {
                 echo "Component: {$componentSlug}\n";
+            }
+
+            $cleanExisting = getenv('WEBLATE_CLEAN_EXISTING_TRANSLATIONS') === 'true' || getenv('WEBLATE_CLEAN_EXISTING_TRANSLATIONS') === '1';
+            if ($cleanExisting) {
+                foreach (glob($this->languagesDir . "/{$textDomain}-*.po") as $existingPo) {
+                    @unlink($existingPo);
+                }
+                foreach (glob($this->languagesDir . "/{$textDomain}-*.mo") as $existingMo) {
+                    @unlink($existingMo);
+                }
             }
 
             // Check if component exists
@@ -706,7 +782,8 @@ class Translator
                 }
             }
 
-                        
+            $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
+
             // Download translations for each language
             foreach ($languagesToDownload as $language) {
                 try {

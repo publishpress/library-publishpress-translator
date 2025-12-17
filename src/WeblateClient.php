@@ -191,11 +191,11 @@ class WeblateClient
 
                 $zip->addFile($potFilePath, basename($potFilePath));
                 
-                // Create a dummy en.po file so Weblate can detect the language pattern
+                // Create a dummy en_US.po file so Weblate can detect the language pattern
                 $potContent = file_get_contents($potFilePath);
-                $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en.po';
+                $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en_US.po';
                 file_put_contents($dummyPoPath, $potContent);
-                $zip->addFile($dummyPoPath, $componentSlug . '-en.po');
+                $zip->addFile($dummyPoPath, $componentSlug . '-en_US.po');
                 
                 $zip->close();
                 
