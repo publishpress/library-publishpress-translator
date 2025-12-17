@@ -174,14 +174,110 @@ class Translator
      * @param string $weblateCode
      * @return string
      */
-    private function reverseMapWeblateLanguage($weblateCode)
+    private function reverseMapWeblateLanguage(string $weblateCode): string
     {
-        $reverseMap = [
+        $code = str_replace('-', '_', $weblateCode);
+
+        // Explicit script → WP locale mapping
+        static $scriptMap = [
             'zh_Hans' => 'zh_CN',
             'zh_Hant' => 'zh_TW',
         ];
+        if (isset($scriptMap[$code])) {
+            return $scriptMap[$code];
+        }
+        if (strpos($code, '_') !== false) {
+            return $code;
+        }
 
-        return $reverseMap[$weblateCode] ?? $weblateCode;
+        $lang = strtolower($code);
+
+        if (is_dir($this->languagesDir)) {
+            $files = glob($this->languagesDir . "/*-{$lang}_*.po");
+            if ($files) {
+                if (preg_match('/-(' . preg_quote($lang, '/') . '_[A-Z]{2,})\.po$/', $files[0], $m)) {
+                    return $m[1];
+                }
+            }
+        }
+
+        // Languages that WordPress uses without region codes
+        $baseLanguages = ['ja', 'fil', 'yo', 'fi'];
+        if (in_array($lang, $baseLanguages)) {
+            return $lang;
+        }
+
+        // Special cases that cannot be derived from "{$lang}_{$langUpper}"
+        $specialCases = [
+            'ko' => 'ko_KR',
+            'nb' => 'nb_NO',
+            'nn' => 'nn_NO',
+            'sr' => 'sr_RS',
+            'he' => 'he_IL',
+            'ar' => 'ar_SA',
+            'hi' => 'hi_IN',
+            'vi' => 'vi_VN',
+            'el' => 'el_GR',
+            'uk' => 'uk_UA',
+            'cs' => 'cs_CZ',
+            'da' => 'da_DK',
+            'sv' => 'sv_SE',
+            'sl' => 'sl_SI',
+            'et' => 'et_EE',
+            'fa' => 'fa_IR',
+            'ur' => 'ur_PK',
+            'bn' => 'bn_BD',
+            'ms' => 'ms_MY',
+            'ca' => 'ca_ES',
+            'eu' => 'eu_ES',
+            'gl' => 'gl_ES',
+        ];
+        if (isset($specialCases[$lang])) {
+            return $specialCases[$lang];
+        }
+
+        $langUpper = strtoupper($lang);
+        return "{$lang}_{$langUpper}";
+    }
+
+    
+    /**
+     * Select Weblate languages for download
+     *
+     * @param array $languageCodes
+     * @return array
+     */
+    private function selectWeblateLanguagesForDownload(array $languageCodes)
+    {
+        $preferBase = getenv('WEBLATE_PREFER_BASE_LANGUAGE') === 'true' || getenv('WEBLATE_PREFER_BASE_LANGUAGE') === '1';
+
+        $selectedByWpLocale = [];
+
+        foreach ($languageCodes as $code) {
+            $code = (string) $code;
+            $wpLocale = (string) $this->reverseMapWeblateLanguage($code);
+
+            if (!isset($selectedByWpLocale[$wpLocale])) {
+                $selectedByWpLocale[$wpLocale] = $code;
+                continue;
+            }
+
+            $current = (string) $selectedByWpLocale[$wpLocale];
+            $currentIsRegional = strpos($current, '_') !== false;
+            $candidateIsRegional = strpos($code, '_') !== false;
+
+            if ($preferBase) {
+                if (!$candidateIsRegional && $currentIsRegional) {
+                    $selectedByWpLocale[$wpLocale] = $code;
+                }
+            } else {
+                if ($candidateIsRegional && !$currentIsRegional) {
+                    $selectedByWpLocale[$wpLocale] = $code;
+                }
+            }
+        }
+
+        return array_values($selectedByWpLocale);
     }
     
     /**
@@ -783,6 +879,7 @@ class Translator
             }
 
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
+            $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
 
             // Download translations for each language
             foreach ($languagesToDownload as $language) {
@@ -1082,6 +1179,10 @@ class Translator
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         }
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
+
+                        $baseName = basename($poFile, '.po');
+                        $moFile = $this->languagesDir . '/' . $baseName . '.mo';
+                        $this->convertPoToMo($poFile, $moFile);
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
