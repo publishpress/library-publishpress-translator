@@ -191,11 +191,11 @@ class WeblateClient
 
                 $zip->addFile($potFilePath, basename($potFilePath));
                 
-                // Create a dummy en.po file so Weblate can detect the language pattern
+                // Create a dummy en_US.po file so Weblate can detect the language pattern
                 $potContent = file_get_contents($potFilePath);
-                $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en.po';
+                $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en_US.po';
                 file_put_contents($dummyPoPath, $potContent);
-                $zip->addFile($dummyPoPath, $componentSlug . '-en.po');
+                $zip->addFile($dummyPoPath, $componentSlug . '-en_US.po');
                 
                 $zip->close();
                 
@@ -467,77 +467,41 @@ class WeblateClient
             $wpLangCode = substr($wpLangCode, strlen('--languages='));
         }
 
-        // Special mappings that don't follow the standard pattern
-        $specialMappings = [
-            'zh_CN' => 'zh_Hans',
-            'zh_TW' => 'zh_Hant',
-            'fil' => 'fil',
-            'yo' => 'yo',
-
-            'en_GB' => 'en_GB',
-            'en_AU' => 'en_AU',
-            'en_CA' => 'en_CA',
-            'en_ZA' => 'en_ZA',
-
-            'pt_BR' => 'pt_BR',
-            'sr_RS' => 'sr_RS',
-            'nb_NO' => 'nb_NO',
-            'nb'    => 'nb_NO',
-            'pt_PT' => 'pt_PT',
-
-            'nl_BE' => 'nl_BE',
-            'nl_NL' => 'nl',
-
-            'de_DE' => 'de',
-            'de_DE_formal'  => 'de',
-            'de_CH'         => 'de_CH',
-
-            'es_AR'         => 'es_AR',
-            'es_CL'         => 'es_CL',
-            'es_CO'         => 'es_CO',
-            'es_MX'         => 'es_MX',
-            'es_ES'         => 'es',
-
-            'bg_BG' => 'bg',
-            'cs_CZ' => 'cs',
-            'da_DK' => 'da',
-            'fr_FR' => 'fr',
-            'hu_HU' => 'hu',
-            'id_ID' => 'id',
-            'it_IT' => 'it',
-            'ko_KR' => 'ko',
-            'lt_LT' => 'lt',
-            'pl_PL' => 'pl',
-            'ro_RO' => 'ro',
-            'ru_RU' => 'ru',
-            'sk_SK' => 'sk',
-            'sl_SI' => 'sl',
-            'sv_SE' => 'sv',
-            'tr_TR' => 'tr',
-        ];
-
-        // If there's a special mapping, use it
-        if (isset($specialMappings[$wpLangCode])) {
-            return $specialMappings[$wpLangCode];
-        }
-
-        if (strpos($wpLangCode, '_') !== false) {
-            $parts = explode('_', $wpLangCode);
-            $languageCode = strtolower($parts[0]);
-            $countryCode = strtolower($parts[1]);
-
-            $fullCode = "{$languageCode}_{$countryCode}";
-
-            $fullFormatCodes = ['en_GB', 'pt_BR', 'he_IL', 'sr_RS'];
-
-            if (in_array($fullCode, $fullFormatCodes)) {
-                return $fullCode;
+        if (strpos($wpLangCode, '_') === false) {
+            if ($wpLangCode === 'nb') {
+                return 'nb_NO';
             }
-
-            return $languageCode;
+            return strtolower($wpLangCode);
         }
 
-        return strtolower($wpLangCode);
+        $parts = explode('_', $wpLangCode, 2);
+        $lang = strtolower($parts[0]);
+        $region = $parts[1];
+
+        if ($wpLangCode === 'zh_CN') {
+            return 'zh_Hans';
+        }
+        if ($wpLangCode === 'zh_TW') {
+            return 'zh_Hant';
+        }
+
+        if (strpos($wpLangCode, '_formal') !== false) {
+            return $lang;
+        }
+
+        $regionUpper = strtoupper($region);
+        $regionLower = strtolower($region);
+        $langUpper = strtoupper($lang);
+
+        if ($regionUpper === $langUpper) {
+            return $lang;
+        }
+
+        if (in_array($lang, ['en', 'es', 'pt', 'de', 'nl', 'sr', 'nb'])) {
+            return "{$lang}_{$regionUpper}";
+        }
+
+        return $lang;
     }
 
     /**
