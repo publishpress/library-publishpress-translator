@@ -2,6 +2,7 @@
 .distignore export-ignore
 .DS_Store export-ignore
 .editorconfig export-ignore
+.env.example export-ignore
 .git export-ignore
 .gitattributes export-ignore
 .github export-ignore
@@ -20,15 +21,18 @@
 *.tar.gz export-ignore
 *.testing export-ignore
 *.zip export-ignore
+/composer.json export-ignore
 /dist export-ignore
+/package.json export-ignore
 /screenshot-*.png export-ignore
 /tests export-ignore
 behat.yml export-ignore
 builder.yml export-ignore
 circle.yml export-ignore
+codeception.dist.yml export-ignore
 codeception.yml export-ignore
-/composer.json export-ignore
 composer.lock export-ignore
+dev-workspace export-ignore
 docker-compose.yml export-ignore
 Gruntfile.js export-ignore
 Gruntfile.js export-ignore
@@ -37,11 +41,11 @@ multisite.xml export-ignore
 multisite.xml.dist export-ignore
 node_modules export-ignore
 package-lock.json export-ignore
-/package.json export-ignore
 phpcs.ruleset.xml export-ignore
 phpcs.xml export-ignore
 phpcs.xml.dist export-ignore
 phpmd.xml export-ignore
+phpstan.neon export-ignore
 phpunit.xml export-ignore
 phpunit.xml.dist export-ignore
 psalm.xml export-ignore
@@ -50,6 +54,3 @@ RoboFile.php export-ignore
 Thumbs.db export-ignore
 webpack.config.js export-ignore
 wp-cli.local.yml export-ignore
-codeception.dist.yml export-ignore
-/dev-workspace export-ignore
-phpstan.neon export-ignore
