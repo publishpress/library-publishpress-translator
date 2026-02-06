@@ -613,8 +613,9 @@ class Translator
         
         $uploadedCount = 0;
         $failedCount = 0;
+        $delayBetweenUploads = (int) (getenv('WEBLATE_UPLOAD_DELAY') ?: 2);
         
-        foreach ($poFilesToUpload as $poFile) {
+        foreach ($poFilesToUpload as $index => $poFile) {
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
             if (!isset($matches[1])) {
                 continue;
@@ -624,21 +625,45 @@ class Translator
 
             echo "    → Preparing {$languageCode}\n";
 
-            try {
-                $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
-                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
-                echo "    ✓ Uploaded {$languageCode}\n";
-                $uploadedCount++;
-            } catch (Exception $e) {
-                if (
-                    strpos($e->getMessage(), 'read-only') !== false &&
-                    in_array($languageCode, ['en', 'en_US', 'en_GB'])
-                ) {
-                    echo "    ⊘ {$languageCode} (source language, read-only)\n";
-                } else {
+            $uploaded = false;
+            $maxRetries = 3;
+            
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                try {
+                    $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
+                    $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
+                    echo "    ✓ Uploaded {$languageCode}\n";
+                    $uploadedCount++;
+                    $uploaded = true;
+                    break;
+                } catch (Exception $e) {
+                    $is503 = strpos($e->getMessage(), '503') !== false || strpos($e->getMessage(), 'Service Unavailable') !== false;
+                    $isTlsError = strpos($e->getMessage(), 'cURL error 56') !== false || strpos($e->getMessage(), 'SSL') !== false;
+                    
+                    if (
+                        strpos($e->getMessage(), 'read-only') !== false &&
+                        in_array($languageCode, ['en', 'en_US', 'en_GB'])
+                    ) {
+                        echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                        $uploaded = true;
+                        break;
+                    }
+                    
+                    if (($is503 || $isTlsError) && $attempt < $maxRetries) {
+                        $backoffDelay = $attempt * 10;
+                        echo "    ⏳ Retrying {$languageCode} after {$backoffDelay}s (attempt {$attempt}/{$maxRetries})...\n";
+                        sleep($backoffDelay);
+                        continue;
+                    }
+                    
                     fwrite(STDERR, "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n");
                     $failedCount++;
+                    break;
                 }
+            }
+            
+            if ($uploaded && $index < count($poFilesToUpload) - 1 && $delayBetweenUploads > 0) {
+                sleep($delayBetweenUploads);
             }
         }
 
