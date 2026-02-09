@@ -119,6 +119,14 @@ The following environment variables control advanced behaviour:
   export WEBLATE_API_TIMEOUT=300
   ```
 
+- **`WEBLATE_UPLOAD_DELAY`** (optional, default: `2` seconds)
+  Delay between uploading translation files to Weblate.
+  Useful to avoid rate limiting or server overload when uploading many languages.
+
+  ```bash
+  export WEBLATE_UPLOAD_DELAY=5
+  ```
+
 - **`WEBLATE_PROJECT_SLUG`** (optional)
   Override the Weblate project slug. By default, uses the plugin slug from `composer.json`.
 
@@ -139,6 +147,23 @@ The following environment variables control advanced behaviour:
 
 - **`WEBLATE_PUSH_URL`** (optional)
   Override the push URL separately from the repository URL. Only needed if push and pull URLs differ.
+
+- **`WEBLATE_PREFER_BASE_LANGUAGE`** (optional, default: `false`)
+  When downloading from Weblate, prefer base language codes (e.g., `de` over `de_DE`) when duplicate locale variants exist.
+  Set to `true` or `1` to enable.
+
+  ```bash
+  export WEBLATE_PREFER_BASE_LANGUAGE=true
+  ```
+
+- **`WEBLATE_CLEAN_EXISTING_TRANSLATIONS`** (optional, default: `false`)
+  Delete all existing `.po` files before downloading from Weblate.
+  Useful for a clean slate when syncing translations.
+  Set to `true` or `1` to enable.
+
+  ```bash
+  export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
+  ```
 
 ### Complete Translation Workflow
 
@@ -201,14 +226,17 @@ Use this when:
 
 **Advanced options:**
 ```bash
-# Custom languages only
+# Translate custom languages only
 vendor/bin/publishpress-translate --languages=de_DE,fr_FR,es_ES
 
 # Force re-translate all strings (ignore existing translations)
 vendor/bin/publishpress-translate --force
 
-# Download specific languages
+# Download specific languages only
 vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
+
+# Upload specific languages only (no AI translation)
+vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 ```
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.

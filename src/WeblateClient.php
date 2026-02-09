@@ -706,7 +706,7 @@ class WeblateClient
      */
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
-        $maxRetries = 2;
+        $maxRetries = 3;
         $attempt    = 0;
 
         while (true) {
@@ -739,12 +739,14 @@ class WeblateClient
             } catch (GuzzleException $e) {
                 $attempt++;
 
-                $is404 = false;
+                $statusCode = null;
+                $errorBody = '';
                 if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                    $is404 = $e->getResponse()->getStatusCode() === 404;
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorBody = $e->getResponse()->getBody()->getContents();
                 }
                 
-                if ($is404 && $attempt === 1) {
+                if ($statusCode === 404 && $attempt === 1) {
                     try {
                         $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
                         continue;
@@ -755,16 +757,14 @@ class WeblateClient
 
                 $isTimeout = $e->getCode() === 28
                     || strpos($e->getMessage(), 'cURL error 28') !== false;
+                $is503 = $statusCode === 503 || strpos($e->getMessage(), '503') !== false || strpos($e->getMessage(), 'Service Unavailable') !== false;
+                $isTlsError = strpos($e->getMessage(), 'cURL error 56') !== false || strpos($e->getMessage(), 'SSL') !== false;
 
-                if ($isTimeout && $attempt <= $maxRetries) {
-                    echo "      retrying {$language} after timeout (attempt {$attempt} of {$maxRetries})...\n";
-                    sleep(5);
+                if (($isTimeout || $is503 || $isTlsError) && $attempt <= $maxRetries) {
+                    $backoffDelay = $attempt * 5;
+                    echo "      retrying {$language} after " . ($is503 ? '503 error' : ($isTlsError ? 'TLS error' : 'timeout')) . " (attempt {$attempt} of {$maxRetries}, waiting {$backoffDelay}s)...\n";
+                    sleep($backoffDelay);
                     continue;
-                }
-
-                $errorBody = '';
-                if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                    $errorBody = $e->getResponse()->getBody()->getContents();
                 }
 
                 throw new Exception(
@@ -789,26 +789,43 @@ class WeblateClient
     public function ensureTranslation($projectSlug, $componentSlug, $language)
     {
         $code = $this->mapLanguageCode($language);
+        $maxRetries = 3;
 
-        try {
-            $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$code}/");
-        } catch (GuzzleException $e) {
-            if ($e->getCode() === 404) {
-                try {
-                    $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
-                        'json' => [
-                            'language_code' => $code,
-                        ]
-                    ]);
-                } catch (GuzzleException $createError) {
-                    $errorBody = '';
-                    if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
-                        $errorBody = $createError->getResponse()->getBody()->getContents();
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$code}/");
+                return;
+            } catch (GuzzleException $e) {
+                $statusCode = method_exists($e, 'getResponse') && $e->getResponse() ? $e->getResponse()->getStatusCode() : $e->getCode();
+                
+                if ($statusCode === 404) {
+                    try {
+                        $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
+                            'json' => [
+                                'language_code' => $code,
+                            ]
+                        ]);
+                        return;
+                    } catch (GuzzleException $createError) {
+                        $createStatusCode = method_exists($createError, 'getResponse') && $createError->getResponse() ? $createError->getResponse()->getStatusCode() : $createError->getCode();
+                        
+                        if ($createStatusCode === 503 && $attempt < $maxRetries) {
+                            sleep($attempt * 5);
+                            continue;
+                        }
+                        
+                        $errorBody = '';
+                        if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
+                            $errorBody = $createError->getResponse()->getBody()->getContents();
+                        }
+                        throw new Exception("Error creating translation for {$language} (mapped: {$code}): " . $createError->getMessage() . "\n" . $errorBody);
                     }
-                    throw new Exception("Error creating translation for {$language} (mapped: {$code}): " . $createError->getMessage() . "\n" . $errorBody);
+                } elseif ($statusCode === 503 && $attempt < $maxRetries) {
+                    sleep($attempt * 5);
+                    continue;
+                } else {
+                    throw new Exception("Error checking translation for {$language} (mapped: {$code}): " . $e->getMessage());
                 }
-            } else {
-                throw new Exception("Error checking translation for {$language} (mapped: {$code}): " . $e->getMessage());
             }
         }
     }
