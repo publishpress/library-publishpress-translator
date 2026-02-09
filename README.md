@@ -16,29 +16,24 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 ## Requirements
 
 - PHP 7.2.5 or higher
+- PHP extensions: `json`, `zip` (usually enabled by default)
 - Node.js 18+ and npm (for Potomatic CLI tool)
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 - Weblate account and API token ([Sign up here](https://hosted.weblate.org/))
-- Plugin must have a `languages/` directory with `.pot` files
+- Plugin must have a `languages/` directory containing one or more `.pot` files
 
 ## Installation
 
 **Note:** This setup works the same whether you're working from the plugin root or inside dev-workspace.
 
-### Step 1: Add to root `composer.json`
+**Recommended setup:**
 
-⚠️ **Current setup (until published on Packagist):**
+### Step 1: Add to root `composer.json`
 
 ```json
 {
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/publishpress/publishpress-translator.git"
-        }
-    ],
     "require": {
-        "publishpress/translations": "^1.0"
+        "publishpress/translations": "dev-development"
     },
     "scripts": {
         "translate": "vendor/bin/publishpress-translate",
@@ -56,24 +51,6 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 
 ```bash
 composer update
-```
-
-**Once on Packagist:** You can remove the custom `repositories` section and keep only the dependency and scripts:
-```json
-{
-    "require": {
-        "publishpress/translations": "^1.0"
-    },
-    "scripts": {
-        "translate": "vendor/bin/publishpress-translate",
-        "translate:dry-run": "vendor/bin/publishpress-translate --dry-run",
-        "translate:download": "vendor/bin/publishpress-translate --download",
-        "translate:upload": "vendor/bin/publishpress-translate --upload",
-        "translate:custom": "vendor/bin/publishpress-translate --languages",
-        "translate:force": "vendor/bin/publishpress-translate --force",
-        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages"
-    }
-}
 ```
 
 ## Usage
@@ -107,8 +84,8 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
 **Get your Weblate API token:**
-1. Sign up at [hosted.weblate.org](https://hosted.weblate.org/)
-2. Go to your profile: https://hosted.weblate.org/accounts/profile/#api
+1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)
+2. Go to your profile: https://weblate.publishpress.com/accounts/profile/#api
 3. Copy your personal API key
 
 ### Additional configuration
@@ -127,7 +104,12 @@ The following environment variables control advanced behaviour:
   - Upload/download with Weblate will be skipped and a warning will be printed.
 
 - **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
-  Override this if you use a self-hosted Weblate instance.
+  Set this to your Weblate base URL (ending in `/api/`) when using a self-hosted instance.
+
+- **`WEBLATE_SKIP_VCS`** (optional, default: `false`)
+  Skip all VCS (repository) operations when interacting with Weblate.
+  Enable this if your project does not expose a repository URL in Weblate, or if it is private and you want to avoid configuring VCS authentication.
+  Set to `true` or `1` to enable.
 
 - **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)
   HTTP timeout used for Weblate API requests.
@@ -135,6 +117,53 @@ The following environment variables control advanced behaviour:
 
   ```bash
   export WEBLATE_API_TIMEOUT=300
+  ```
+
+- **`WEBLATE_UPLOAD_DELAY`** (optional, default: `2` seconds)
+  Delay between uploading translation files to Weblate.
+  Useful to avoid rate limiting or server overload when uploading many languages.
+
+  ```bash
+  export WEBLATE_UPLOAD_DELAY=5
+  ```
+
+- **`WEBLATE_PROJECT_SLUG`** (optional)
+  Override the Weblate project slug. By default, uses the plugin slug from `composer.json`.
+
+- **`WEBLATE_COMPONENT_SLUG`** (optional)
+  Override the Weblate component slug. By default, uses the text domain from the `.pot` file.
+
+- **`WEBLATE_GIT_BRANCH`** (optional, default: `development`)
+  Specify which Git branch Weblate should use for the component.
+
+- **`WEBLATE_REPO_TYPE`** (optional, default: `https`)
+  Repository access type: `https` or `ssh`. Use `ssh` if you have SSH keys configured in Weblate.
+
+- **`WEBLATE_REPO_URL`** (optional)
+  Override the repository URL for Weblate. Useful for private repositories or custom Git hosting.
+  Examples:
+  - HTTPS with credentials: `https://username:token@github.com/owner/repo.git`
+  - SSH: `git@github.com:owner/repo.git`
+
+- **`WEBLATE_PUSH_URL`** (optional)
+  Override the push URL separately from the repository URL. Only needed if push and pull URLs differ.
+
+- **`WEBLATE_PREFER_BASE_LANGUAGE`** (optional, default: `false`)
+  When downloading from Weblate, prefer base language codes (e.g., `de` over `de_DE`) when duplicate locale variants exist.
+  Set to `true` or `1` to enable.
+
+  ```bash
+  export WEBLATE_PREFER_BASE_LANGUAGE=true
+  ```
+
+- **`WEBLATE_CLEAN_EXISTING_TRANSLATIONS`** (optional, default: `false`)
+  Delete all existing `.po` files before downloading from Weblate.
+  Useful for a clean slate when syncing translations.
+  Set to `true` or `1` to enable.
+
+  ```bash
+  export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
+  ```
 
 ### Complete Translation Workflow
 
@@ -174,11 +203,12 @@ This ensures:
 
 #### 2. Review & Improve in Weblate
 
-After running translate, we then can:
-1. Visit https://hosted.weblate.org/projects/YOUR-PLUGIN/
-2. Review and improve AI-generated translations
-3. Use Weblate's translation memory and suggestions
-4. Collaborate with community translators
+After running `translate`, you can visit your project in Weblate:
+1. Hosted Weblate: https://hosted.weblate.org/projects/YOUR-PROJECT/
+2. Self-hosted Weblate: https://YOUR-WEBLATE-DOMAIN/projects/YOUR-PROJECT/
+3. Review and improve AI-generated translations
+4. Use Weblate's translation memory and suggestions
+5. Collaborate with community translators
 
 #### 3. Download Only
 
@@ -196,14 +226,17 @@ Use this when:
 
 **Advanced options:**
 ```bash
-# Custom languages only
-lib/vendor/bin/publishpress-translate --languages=de_DE,fr_FR,es_ES
+# Translate custom languages only
+vendor/bin/publishpress-translate --languages=de_DE,fr_FR,es_ES
 
 # Force re-translate all strings (ignore existing translations)
-lib/vendor/bin/publishpress-translate --force
+vendor/bin/publishpress-translate --force
 
-# Download specific languages
-lib/vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
+# Download specific languages only
+vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
+
+# Upload specific languages only (no AI translation)
+vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 ```
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
