@@ -106,10 +106,9 @@ The following environment variables control advanced behaviour:
 - **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
   Set this to your Weblate base URL (ending in `/api/`) when using a self-hosted instance.
 
-- **`WEBLATE_SKIP_VCS`** (optional, default: `false`)
+- **`WEBLATE_SKIP_VCS`** (optional, default: `true`)
   Skip all VCS (repository) operations when interacting with Weblate.
-  Enable this if your project does not expose a repository URL in Weblate, or if it is private and you want to avoid configuring VCS authentication.
-  Set to `true` or `1` to enable.
+  By default, VCS is skipped to avoid requiring repository configuration. Set to `false` or `0` to enable VCS operations if your project has a configured repository URL in Weblate.
 
 - **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)
   HTTP timeout used for Weblate API requests.
