@@ -718,6 +718,9 @@ class WeblateClient
                 $this->removeFuzzyFromPoHeader($poFilePath);
                 $this->normalizePluralFormsForWeblate($language, $poFilePath);
 
+                $hasVcs = $this->componentHasVcs($projectSlug, $componentSlug);
+                $method = $hasVcs ? 'translate' : 'replace';
+
                 $response = $this->client->post(
                     "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                     [
@@ -728,7 +731,7 @@ class WeblateClient
                             ],
                             [
                                 'name'     => 'method',
-                                'contents' => 'translate',
+                                'contents' => $method,
                             ],
                         ],
                     ]
