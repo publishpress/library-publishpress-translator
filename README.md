@@ -32,8 +32,8 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 
 ```json
 {
-    "require": {
-        "publishpress/translations": "dev-development"
+    "require-dev": {
+        "publishpress/translations": "^1.0.0"
     },
     "scripts": {
         "translate": "vendor/bin/publishpress-translate",
