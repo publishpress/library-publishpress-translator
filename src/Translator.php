@@ -27,7 +27,7 @@ class Translator
     private $languagesDir;
 
     /**
-     * Languages to skip (not translated by Potomatic, handled by human translators)
+     * Languages to skip
      *
      * @var array
      */
@@ -59,12 +59,6 @@ class Translator
      * @var bool
     */
     private $customTargetLanguages = false;
-
-    /**
-     * Languages that were actually translated by Potomatic in this session
-     * @var array
-     */
-    private $translatedLanguages = [];
 
     /**
      * Dry run mode
@@ -451,18 +445,15 @@ class Translator
         while ($i < count($lines)) {
             $line = $lines[$i];
 
-            // Look for msgid lines with the plugin name
             if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
                 $msgid = $msgidMatch[1];
 
-                // If this is the plugin name, check if next line is msgstr
                 if ($msgid === $pluginName && $i + 1 < count($lines)) {
                     $nextLine = $lines[$i + 1];
-                    
-                    // If there's a msgstr on the next line, revert it
+
                     if (preg_match('/^msgstr\s+"(.*)"$/', $nextLine)) {
                         $result[] = $line;
-                        // Set msgstr to the same as msgid (untranslated)
+
                         $result[] = 'msgstr "' . $msgid . '"';
                         $i += 2;
                         continue;
@@ -1034,7 +1025,6 @@ class Translator
 
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         
-                        // Revert plugin name translations
                         $this->revertPluginNameTranslations($poFile);
                         
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
@@ -1393,7 +1383,6 @@ class Translator
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         }
                         
-                        // Revert plugin name translations
                         $this->revertPluginNameTranslations($poFile);
                         
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
