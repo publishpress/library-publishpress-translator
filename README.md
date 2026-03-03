@@ -164,6 +164,15 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
+- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
+  Comma-separated list of language codes to skip during translation, upload, and download.
+  These languages are typically handled by human translators.
+  The default skipped languages are merged with any custom ones you specify.
+
+  ```bash
+  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR
+  ```
+
 ### Complete Translation Workflow
 
 #### 1. Run Translation (Full Cycle)
@@ -244,7 +253,6 @@ vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 
 The tool translates into these languages by default:
 - German (de_DE)
-- Brazilian Portuguese (pt_BR)
 - Indonesian (id_ID)
 - Filipino (fil)
 - Russian (ru_RU)
@@ -252,6 +260,32 @@ The tool translates into these languages by default:
 - Finnish (fi)
 - Japanese (ja)
 - Korean (ko_KR)
+
+### Skipped Languages
+ 
+The following languages should not be translated by Potomatic, they are handled by human translators:
+- Italian (it_IT)
+- Spanish (es_ES)
+- French (fr_FR)
+- Brazilian Portuguese (pt_BR)
+ 
+These languages will be skipped during translation and upload processes, even if PO files exist for them.
+
+### Preventing Plugin Name Translation
+
+By default, all strings in your plugin are translated, including the plugin name. To keep your plugin name untranslated, add it to your `composer.json` file:
+
+```json
+{
+    "extra": {
+        "plugin_name": "your plugin name"
+    }
+}
+```
+
+The translation tool will then automatically keep the plugin name untranslated in all PO files, both when:
+- Running AI translations with Potomatic
+- Downloading translations from Weblate
 
 ## How It Works
 
