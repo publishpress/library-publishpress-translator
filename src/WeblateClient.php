@@ -164,7 +164,7 @@ class WeblateClient
      */
     public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
-        $skipVcs = getenv('WEBLATE_SKIP_VCS') === 'true' || getenv('WEBLATE_SKIP_VCS') === '1';
+        $skipVcs = getenv('WEBLATE_SKIP_VCS') !== 'false' && getenv('WEBLATE_SKIP_VCS') !== '0';
         
         try {
             $potContent = file_get_contents($potFilePath);
@@ -718,6 +718,9 @@ class WeblateClient
                 $this->removeFuzzyFromPoHeader($poFilePath);
                 $this->normalizePluralFormsForWeblate($language, $poFilePath);
 
+                $hasVcs = $this->componentHasVcs($projectSlug, $componentSlug);
+                $method = $hasVcs ? 'translate' : 'replace';
+
                 $response = $this->client->post(
                     "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                     [
@@ -728,7 +731,7 @@ class WeblateClient
                             ],
                             [
                                 'name'     => 'method',
-                                'contents' => 'translate',
+                                'contents' => $method,
                             ],
                         ],
                     ]

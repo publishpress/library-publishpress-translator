@@ -32,8 +32,8 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 
 ```json
 {
-    "require": {
-        "publishpress/translations": "dev-development"
+    "require-dev": {
+        "publishpress/translations": "^1.0.0"
     },
     "scripts": {
         "translate": "vendor/bin/publishpress-translate",
@@ -106,10 +106,9 @@ The following environment variables control advanced behaviour:
 - **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
   Set this to your Weblate base URL (ending in `/api/`) when using a self-hosted instance.
 
-- **`WEBLATE_SKIP_VCS`** (optional, default: `false`)
+- **`WEBLATE_SKIP_VCS`** (optional, default: `true`)
   Skip all VCS (repository) operations when interacting with Weblate.
-  Enable this if your project does not expose a repository URL in Weblate, or if it is private and you want to avoid configuring VCS authentication.
-  Set to `true` or `1` to enable.
+  By default, VCS is skipped to avoid requiring repository configuration. Set to `false` or `0` to enable VCS operations if your project has a configured repository URL in Weblate.
 
 - **`WEBLATE_API_TIMEOUT`** (optional, default: `120` seconds)
   HTTP timeout used for Weblate API requests.
@@ -163,6 +162,15 @@ The following environment variables control advanced behaviour:
 
   ```bash
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
+  ```
+
+- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
+  Comma-separated list of language codes to skip during translation, upload, and download.
+  These languages are typically handled by human translators.
+  The default skipped languages are merged with any custom ones you specify.
+
+  ```bash
+  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR
   ```
 
 ### Complete Translation Workflow
@@ -245,7 +253,6 @@ vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 
 The tool translates into these languages by default:
 - German (de_DE)
-- Brazilian Portuguese (pt_BR)
 - Indonesian (id_ID)
 - Filipino (fil)
 - Russian (ru_RU)
@@ -253,6 +260,32 @@ The tool translates into these languages by default:
 - Finnish (fi)
 - Japanese (ja)
 - Korean (ko_KR)
+
+### Skipped Languages
+ 
+The following languages should not be translated by Potomatic, they are handled by human translators:
+- Italian (it_IT)
+- Spanish (es_ES)
+- French (fr_FR)
+- Brazilian Portuguese (pt_BR)
+ 
+These languages will be skipped during translation and upload processes, even if PO files exist for them.
+
+### Preventing Plugin Name Translation
+
+By default, all strings in your plugin are translated, including the plugin name. To keep your plugin name untranslated, add it to your `composer.json` file:
+
+```json
+{
+    "extra": {
+        "plugin_name": "your plugin name"
+    }
+}
+```
+
+The translation tool will then automatically keep the plugin name untranslated in all PO files, both when:
+- Running AI translations with Potomatic
+- Downloading translations from Weblate
 
 ## How It Works
 
