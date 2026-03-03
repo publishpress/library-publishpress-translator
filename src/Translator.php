@@ -27,13 +27,24 @@ class Translator
     private $languagesDir;
 
     /**
+     * Languages to skip
+     *
+     * @var array
+     */
+    private $skippedLanguages = [
+        'it_IT',
+        'es_ES',
+        'fr_FR',
+        'pt_BR',
+    ];
+
+    /**
      * Target languages
      *
      * @var array
      */
     private $targetLanguages = [
         'de_DE',
-        'pt_BR',
         'id_ID',
         'fil',
         'ru_RU',
@@ -49,7 +60,6 @@ class Translator
     */
     private $customTargetLanguages = false;
 
-    
     /**
      * Dry run mode
      *
@@ -125,6 +135,14 @@ class Translator
                 $this->weblateEnabled = false;
             }
         }
+
+        // Allow configuring skipped languages via environment variable
+        $envSkipped = getenv('SKIP_LANGUAGES');
+        if ($envSkipped) {
+            $customSkipped = array_map('trim', explode(',', $envSkipped));
+            $this->skippedLanguages = array_merge($this->skippedLanguages, $customSkipped);
+            $this->skippedLanguages = array_unique($this->skippedLanguages);
+        }
     }
 
     /**
@@ -154,7 +172,7 @@ class Translator
      */
     public function setTargetLanguages(array $languages)
     {
-        $this->targetLanguages = $languages;
+        $this->targetLanguages = array_diff($languages, $this->skippedLanguages);
         $this->customTargetLanguages = true;
     }
 
@@ -380,6 +398,77 @@ class Translator
     }
 
     /**
+     * Get plugin name from composer.json extra property
+     * Returns the configured plugin name that should not be translated
+     *
+     * @return string|null Plugin name to exclude, or null if not configured
+     */
+    private function getPluginNameForExclusion()
+    {
+        $composerFile = $this->pluginRoot . '/composer.json';
+
+        if (!file_exists($composerFile)) {
+            return null;
+        }
+
+        $composer = json_decode(file_get_contents($composerFile), true);
+
+        if (isset($composer['extra']['plugin_name'])) {
+            return $composer['extra']['plugin_name'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Revert plugin name translations in PO file
+     * Keeps the plugin name untranslated (msgstr = msgid)
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function revertPluginNameTranslations($poFile)
+    {
+        $pluginName = $this->getPluginNameForExclusion();
+        if (!$pluginName) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $i = 0;
+
+        while ($i < count($lines)) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
+                $msgid = $msgidMatch[1];
+
+                if ($msgid === $pluginName && $i + 1 < count($lines)) {
+                    $nextLine = $lines[$i + 1];
+
+                    if (preg_match('/^msgstr\s+"(.*)"$/', $nextLine)) {
+                        $result[] = $line;
+
+                        $result[] = 'msgstr "' . $msgid . '"';
+                        $i += 2;
+                        continue;
+                    }
+                }
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
      * Find all POT files
      *
      * @return array
@@ -591,12 +680,12 @@ class Translator
         // Get all PO files
         $allPoFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
         
-        // Filter by target languages if custom languages were specified
+        // Filter by target languages if custom languages were specified, and always exclude skipped languages
         $poFilesToUpload = [];
         if ($this->customTargetLanguages) {
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages)) {
+                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages) && !in_array($matches[1], $this->skippedLanguages)) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -608,7 +697,13 @@ class Translator
             
             echo "  • Uploading " . count($poFilesToUpload) . " language(s): " . implode(', ', $this->targetLanguages) . "\n";
         } else {
-            $poFilesToUpload = $allPoFiles;
+            // Filter out skipped languages from all PO files
+            foreach ($allPoFiles as $poFile) {
+                preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
+                if (isset($matches[1]) && !in_array($matches[1], $this->skippedLanguages)) {
+                    $poFilesToUpload[] = $poFile;
+                }
+            }
         }
         
         $uploadedCount = 0;
@@ -906,6 +1001,12 @@ class Translator
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
             $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
 
+            // Filter out skipped languages
+            $languagesToDownload = array_filter($languagesToDownload, function($lang) {
+                $wpLocale = $this->reverseMapWeblateLanguage($lang);
+                return !in_array($wpLocale, $this->skippedLanguages);
+            });
+
             // Download translations for each language
             foreach ($languagesToDownload as $language) {
                 try {
@@ -923,6 +1024,8 @@ class Translator
                         chmod($poFile, 0644);
 
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        
+                        $this->revertPluginNameTranslations($poFile);
                         
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
@@ -1279,6 +1382,9 @@ class Translator
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         }
+                        
+                        $this->revertPluginNameTranslations($poFile);
+                        
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
 
                         $baseName = basename($poFile, '.po');
