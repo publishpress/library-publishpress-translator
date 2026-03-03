@@ -33,7 +33,6 @@ class Translator
      */
     private $targetLanguages = [
         'de_DE',
-        'pt_BR',
         'id_ID',
         'fil',
         'ru_RU',
