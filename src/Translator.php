@@ -421,6 +421,48 @@ class Translator
     }
 
     /**
+     * Remove duplicate msgid entries from PO file
+     * Keeps only the first occurrence of each msgid to prevent Weblate constraint violations
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function deduplicatePoFile($poFile)
+    {
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $seenMsgids = [];
+        $i = 0;
+
+        while ($i < count($lines)) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgid = $msgidMatch[1];
+
+                if (isset($seenMsgids[$msgid])) {
+                    $i++;
+                    while ($i < count($lines) && !preg_match('/^msgid\s+/', $lines[$i])) {
+                        $i++;
+                    }
+                    continue;
+                }
+
+                $seenMsgids[$msgid] = true;
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
      * Revert plugin name translations in PO file
      * Keeps the plugin name untranslated (msgstr = msgid)
      *
@@ -742,6 +784,19 @@ class Translator
                         echo "    ⊘ {$languageCode} (source language, read-only)\n";
                         $uploaded = true;
                         break;
+                    }
+
+                    // Check for duplicate constraint error
+                    if (strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false || 
+                        strpos($e->getMessage(), 'trans_unit_translation_id_id_hash') !== false) {
+                        echo "      ⚠️  Duplicate entries detected, cleaning PO file...\n";
+                        $this->deduplicatePoFile($poFile);
+                                        
+                        if ($attempt < $maxRetries) {
+                            echo "      🔄 Retrying upload after cleanup...\n";
+                            sleep(2);
+                            continue;
+                        }
                     }
                     
                     if (($is503 || $isTlsError) && $attempt < $maxRetries) {

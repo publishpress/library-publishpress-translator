@@ -471,12 +471,19 @@ class WeblateClient
             if ($wpLangCode === 'nb') {
                 return 'nb_NO';
             }
+            if ($wpLangCode === 'by') {
+                return 'be';
+            }
             return strtolower($wpLangCode);
         }
 
         $parts = explode('_', $wpLangCode, 2);
         $lang = strtolower($parts[0]);
         $region = $parts[1];
+
+        if ($lang === 'by') {
+            $lang = 'be';
+        }
 
         if ($wpLangCode === 'zh_CN') {
             return 'zh_Hans';
