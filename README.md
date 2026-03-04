@@ -58,6 +58,22 @@ composer update
 ### Set Environment Variables
 
 Before using the translation tools, set your API keys as environment variables:
+Create a `.env` file in your plugin root with your API keys:
+
+```
+OPENAI_API_KEY=sk-proj-your-openai-key
+WEBLATE_API_TOKEN=wlu_your-weblate-token
+```
+
+The `.env` file is automatically loaded when you run the translation tool. No additional configuration needed.
+
+Values can be quoted or unquoted:
+```
+OPENAI_API_KEY="sk-proj-your-openai-key"
+WEBLATE_API_TOKEN='wlu_your-weblate-token'
+```
+
+Alternatively, you can set environment variables directly in your shell:
 
 **Windows (PowerShell):**
 ```powershell
@@ -82,6 +98,7 @@ Or create a `.env` file in your plugin root (don't commit this!):
 OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
+> **Note:** Shell environment variables take precedence over `.env` file values.
 
 **Get your Weblate API token:**
 1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)

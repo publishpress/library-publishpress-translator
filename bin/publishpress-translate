@@ -51,6 +51,38 @@ if (!file_exists($pluginRoot . '/composer.json')) {
     exit(1);
 }
 
+$envFile = null;
+if (file_exists($pluginRoot . '/.env')) {
+    $envFile = $pluginRoot . '/.env';
+} elseif (file_exists($pluginRoot . '/dev-workspace/.env')) {
+    $envFile = $pluginRoot . '/dev-workspace/.env';
+}
+
+if ($envFile) {
+    $envLines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($envLines as $envLine) {
+        $envLine = trim($envLine);
+        // Skip comments
+        if ($envLine === '' || $envLine[0] === '#') {
+            continue;
+        }
+        // Parse KEY=VALUE (with optional quotes)
+        if (strpos($envLine, '=') !== false) {
+            list($key, $value) = explode('=', $envLine, 2);
+            $key = trim($key);
+            $value = trim($value);
+
+            if (strlen($value) >= 2 && (($value[0] === '"' && $value[strlen($value) - 1] === '"') || ($value[0] === "'" && $value[strlen($value) - 1] === "'"))) {
+                $value = substr($value, 1, -1);
+            }
+            // Only set if not already defined in the environment
+            if (getenv($key) === false) {
+                putenv("{$key}={$value}");
+            }
+        }
+    }
+}
+
 $setupPotomaticPath = dirname(__DIR__) . '/scripts/setup-potomatic.php';
 if (file_exists($setupPotomaticPath)) {
     require_once $setupPotomaticPath;
