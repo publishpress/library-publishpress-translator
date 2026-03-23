@@ -182,8 +182,8 @@ The following environment variables control advanced behaviour:
   ```
 
 - **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
-  Comma-separated list of language codes to skip during translation, upload, and download.
-  These languages are typically handled by human translators.
+  Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
+  These languages are typically handled by human translators on Weblate.
   The default skipped languages are merged with any custom ones you specify.
 
   ```bash
