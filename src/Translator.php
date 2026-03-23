@@ -185,7 +185,60 @@ class Translator
     {
         $this->weblateEnabled = (bool) $enabled;
     }
-    
+
+    /**
+     * Repair malformed plural entries in all existing .po files.
+     *
+     * Scans every .po file in the languages directory for plural entries where
+     * msgstr[0] contains pipe-delimited forms and splits them into proper
+     * separate msgstr[N] lines. Also regenerates the corresponding .mo files.
+     *
+     * @return bool
+     */
+    public function repairPluralEntries()
+    {
+        echo "\n🔧 Repairing plural entries in existing .po files\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po');
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+
+        $repaired = 0;
+        foreach ($poFiles as $poFile) {
+            $before = file_get_contents($poFile);
+            $this->repairPluralPipeDelimitedEntries($poFile);
+            $after = file_get_contents($poFile);
+
+            if ($before !== $after) {
+                $baseName = basename($poFile);
+                echo "  ✓ Repaired: {$baseName}\n";
+
+                // Regenerate .mo file
+                $moFile = substr($poFile, 0, -3) . '.mo';
+                $this->convertPoToMo($poFile, $moFile);
+
+                $repaired++;
+            }
+        }
+
+        echo "\n" . str_repeat('=', 50) . "\n";
+
+        if ($repaired > 0) {
+            echo "✨ Repaired {$repaired} file(s) with malformed plural entries.\n\n";
+        } else {
+            echo "✨ No malformed plural entries found — all files are clean.\n\n";
+        }
+
+        return true;
+    }
+
     /**
      * Reverse-map Weblate language codes to WordPress locale codes
      *
@@ -508,6 +561,86 @@ class Translator
         }
 
         file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
+     * Repair plural entries where msgstr[0] contains pipe-delimited forms.
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function repairPluralPipeDelimitedEntries($poFile)
+    {
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $count = count($lines);
+        $modified = false;
+
+        for ($i = 0; $i < $count; $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid_plural\s+"(.*)"$/', $line)) {
+                $result[] = $line;
+                $i++;
+
+                $msgstrLines = [];
+                while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
+                    $msgstrLines[(int)$m[1]] = $m[2];
+                    $i++;
+                }
+
+                if (
+                    isset($msgstrLines[0])
+                    && strpos($msgstrLines[0], '|') !== false
+                    && $this->allPluralFormsEmptyExcept($msgstrLines, 0)
+                ) {
+                    $forms = array_map('trim', explode('|', $msgstrLines[0]));
+                    $nplurals = max(count($msgstrLines), count($forms));
+
+                    for ($idx = 0; $idx < $nplurals; $idx++) {
+                        $result[] = 'msgstr[' . $idx . '] "' . ($forms[$idx] ?? '') . '"';
+                    }
+                    $modified = true;
+                } else {
+                    foreach ($msgstrLines as $idx => $val) {
+                        $result[] = 'msgstr[' . $idx . '] "' . $val . '"';
+                    }
+                }
+
+                $i--;
+                continue;
+            }
+
+            $result[] = $line;
+        }
+
+        if ($modified) {
+            file_put_contents($poFile, implode("\n", $result));
+        }
+    }
+
+    /**
+     * Check if all plural forms except the given index are empty
+     *
+     * @param array $msgstrLines Associative array of index => value
+     * @param int   $exceptIndex Index to skip
+     * @return bool
+     */
+    private function allPluralFormsEmptyExcept(array $msgstrLines, int $exceptIndex)
+    {
+        foreach ($msgstrLines as $idx => $val) {
+            if ($idx === $exceptIndex) {
+                continue;
+            }
+            if ($val !== '') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1431,6 +1564,8 @@ class Translator
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         }
+
+                        $this->repairPluralPipeDelimitedEntries($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
                         

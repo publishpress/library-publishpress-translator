@@ -55,5 +55,8 @@
 		"openai": "^4.0.0",
 		"tiktoken": "^1.0.21",
 		"zod": "^3.25.23"
+	},
+	"devDependencies": {
+		"vitest": "^4.1.0"
 	}
 }
