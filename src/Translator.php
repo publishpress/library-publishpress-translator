@@ -1056,12 +1056,6 @@ class Translator
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
             $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
 
-            // Filter out skipped languages
-            $languagesToDownload = array_filter($languagesToDownload, function($lang) {
-                $wpLocale = $this->reverseMapWeblateLanguage($lang);
-                return !in_array($wpLocale, $this->skippedLanguages);
-            });
-
             // Download translations for each language
             foreach ($languagesToDownload as $language) {
                 try {
