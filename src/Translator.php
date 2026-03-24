@@ -48,10 +48,36 @@ class Translator
         'id_ID',
         'fil',
         'ru_RU',
-        'yo',
+        'yor',
         'fi',
         'ja',
-        'ko_KR'
+        'ko_KR',
+        'nl_NL',
+        'pl_PL',
+        'tr_TR',
+        'vi',
+        'fa_IR',
+        'cs_CZ',
+        'pt_PT',
+        'zh_CN',
+        'sv_SE',
+        'hu_HU',
+        'da_DK',
+        'ar',
+        'he_IL',
+        'ro_RO',
+        'el',
+        'th',
+        'zh_TW',
+        'sk_SK',
+        'uk',
+        'nb_NO',
+        'bg_BG',
+        'hr',
+        'ca',
+        'lt_LT',
+        'et_EE',
+        'sl_SI'
     ];
 
     /**
@@ -185,7 +211,60 @@ class Translator
     {
         $this->weblateEnabled = (bool) $enabled;
     }
-    
+
+    /**
+     * Repair malformed plural entries in all existing .po files.
+     *
+     * Scans every .po file in the languages directory for plural entries where
+     * msgstr[0] contains pipe-delimited forms and splits them into proper
+     * separate msgstr[N] lines. Also regenerates the corresponding .mo files.
+     *
+     * @return bool
+     */
+    public function repairPluralEntries()
+    {
+        echo "\n🔧 Repairing plural entries in existing .po files\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po');
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+
+        $repaired = 0;
+        foreach ($poFiles as $poFile) {
+            $before = file_get_contents($poFile);
+            $this->repairPluralPipeDelimitedEntries($poFile);
+            $after = file_get_contents($poFile);
+
+            if ($before !== $after) {
+                $baseName = basename($poFile);
+                echo "  ✓ Repaired: {$baseName}\n";
+
+                // Regenerate .mo file
+                $moFile = substr($poFile, 0, -3) . '.mo';
+                $this->convertPoToMo($poFile, $moFile);
+
+                $repaired++;
+            }
+        }
+
+        echo "\n" . str_repeat('=', 50) . "\n";
+
+        if ($repaired > 0) {
+            echo "✨ Repaired {$repaired} file(s) with malformed plural entries.\n\n";
+        } else {
+            echo "✨ No malformed plural entries found — all files are clean.\n\n";
+        }
+
+        return true;
+    }
+
     /**
      * Reverse-map Weblate language codes to WordPress locale codes
      *
@@ -200,6 +279,7 @@ class Translator
         static $scriptMap = [
             'zh_Hans' => 'zh_CN',
             'zh_Hant' => 'zh_TW',
+            'yo' => 'yor',
         ];
         if (isset($scriptMap[$code])) {
             return $scriptMap[$code];
@@ -220,7 +300,7 @@ class Translator
         }
 
         // Languages that WordPress uses without region codes
-        $baseLanguages = ['ja', 'fil', 'yo', 'fi'];
+        $baseLanguages = ['ja', 'fil', 'yor', 'fi', 'ca', 'vi', 'ar', 'el', 'th', 'uk', 'hr'];
         if (in_array($lang, $baseLanguages)) {
             return $lang;
         }
@@ -232,11 +312,7 @@ class Translator
             'nn' => 'nn_NO',
             'sr' => 'sr_RS',
             'he' => 'he_IL',
-            'ar' => 'ar_SA',
             'hi' => 'hi_IN',
-            'vi' => 'vi_VN',
-            'el' => 'el_GR',
-            'uk' => 'uk_UA',
             'cs' => 'cs_CZ',
             'da' => 'da_DK',
             'sv' => 'sv_SE',
@@ -246,7 +322,6 @@ class Translator
             'ur' => 'ur_PK',
             'bn' => 'bn_BD',
             'ms' => 'ms_MY',
-            'ca' => 'ca_ES',
             'eu' => 'eu_ES',
             'gl' => 'gl_ES',
         ];
@@ -421,6 +496,48 @@ class Translator
     }
 
     /**
+     * Remove duplicate msgid entries from PO file
+     * Keeps only the first occurrence of each msgid to prevent Weblate constraint violations
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function deduplicatePoFile($poFile)
+    {
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $seenMsgids = [];
+        $i = 0;
+
+        while ($i < count($lines)) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgid = $msgidMatch[1];
+
+                if (isset($seenMsgids[$msgid])) {
+                    $i++;
+                    while ($i < count($lines) && !preg_match('/^msgid\s+/', $lines[$i])) {
+                        $i++;
+                    }
+                    continue;
+                }
+
+                $seenMsgids[$msgid] = true;
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
      * Revert plugin name translations in PO file
      * Keeps the plugin name untranslated (msgstr = msgid)
      *
@@ -466,6 +583,101 @@ class Translator
         }
 
         file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
+     * Repair plural entries where msgstr[0] contains pipe-delimited forms.
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function repairPluralPipeDelimitedEntries($poFile)
+    {
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $count = count($lines);
+        $modified = false;
+
+        for ($i = 0; $i < $count; $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid_plural\s+"(.*)"$/', $line)) {
+                $result[] = $line;
+                $i++;
+
+                $msgstrEntries = [];
+                $msgstrRawLines = [];
+
+                while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
+                    $idx = (int)$m[1];
+                    $value = $m[2];
+                    $rawLines = [$lines[$i]];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $value .= $cont[1];
+                        $rawLines[] = $lines[$i];
+                        $i++;
+                    }
+
+                    $msgstrEntries[$idx] = $value;
+                    $msgstrRawLines[$idx] = $rawLines;
+                }
+
+                if (
+                    isset($msgstrEntries[0])
+                    && strpos($msgstrEntries[0], '|') !== false
+                    && $this->allPluralFormsEmptyExcept($msgstrEntries, 0)
+                ) {
+                    $forms = array_map('trim', explode('|', $msgstrEntries[0]));
+                    $nplurals = max(count($msgstrEntries), count($forms));
+
+                    for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
+                        $result[] = 'msgstr[' . $formIdx . '] "' . ($forms[$formIdx] ?? '') . '"';
+                    }
+                    $modified = true;
+                } else {
+                    foreach ($msgstrRawLines as $rawLines) {
+                        foreach ($rawLines as $rawLine) {
+                            $result[] = $rawLine;
+                        }
+                    }
+                }
+
+                $i--;
+                continue;
+            }
+
+            $result[] = $line;
+        }
+
+        if ($modified) {
+            file_put_contents($poFile, implode("\n", $result));
+        }
+    }
+
+    /**
+     * Check if all plural forms except the given index are empty
+     *
+     * @param array $msgstrLines Associative array of index => value
+     * @param int   $exceptIndex Index to skip
+     * @return bool
+     */
+    private function allPluralFormsEmptyExcept(array $msgstrLines, int $exceptIndex)
+    {
+        foreach ($msgstrLines as $idx => $val) {
+            if ($idx === $exceptIndex) {
+                continue;
+            }
+            if ($val !== '') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -743,6 +955,19 @@ class Translator
                         $uploaded = true;
                         break;
                     }
+
+                    // Check for duplicate constraint error
+                    if (strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false || 
+                        strpos($e->getMessage(), 'trans_unit_translation_id_id_hash') !== false) {
+                        echo "      ⚠️  Duplicate entries detected, cleaning PO file...\n";
+                        $this->deduplicatePoFile($poFile);
+                                        
+                        if ($attempt < $maxRetries) {
+                            echo "      🔄 Retrying upload after cleanup...\n";
+                            sleep(2);
+                            continue;
+                        }
+                    }
                     
                     if (($is503 || $isTlsError) && $attempt < $maxRetries) {
                         $backoffDelay = $attempt * 10;
@@ -1000,12 +1225,6 @@ class Translator
 
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
             $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
-
-            // Filter out skipped languages
-            $languagesToDownload = array_filter($languagesToDownload, function($lang) {
-                $wpLocale = $this->reverseMapWeblateLanguage($lang);
-                return !in_array($wpLocale, $this->skippedLanguages);
-            });
 
             // Download translations for each language
             foreach ($languagesToDownload as $language) {
@@ -1382,6 +1601,8 @@ class Translator
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         }
+
+                        $this->repairPluralPipeDelimitedEntries($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
                         

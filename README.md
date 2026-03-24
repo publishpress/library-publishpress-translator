@@ -42,7 +42,8 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         "translate:upload": "vendor/bin/publishpress-translate --upload",
         "translate:custom": "vendor/bin/publishpress-translate --languages",
         "translate:force": "vendor/bin/publishpress-translate --force",
-        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages"
+        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages",
+        "translate:repair-plurals": "php vendor/bin/publishpress-translate --repair-plurals",
     }
 }
 ```
@@ -58,6 +59,22 @@ composer update
 ### Set Environment Variables
 
 Before using the translation tools, set your API keys as environment variables:
+Create a `.env` file in your plugin root with your API keys:
+
+```
+OPENAI_API_KEY=sk-proj-your-openai-key
+WEBLATE_API_TOKEN=wlu_your-weblate-token
+```
+
+The `.env` file is automatically loaded when you run the translation tool. No additional configuration needed.
+
+Values can be quoted or unquoted:
+```
+OPENAI_API_KEY="sk-proj-your-openai-key"
+WEBLATE_API_TOKEN='wlu_your-weblate-token'
+```
+
+Alternatively, you can set environment variables directly in your shell:
 
 **Windows (PowerShell):**
 ```powershell
@@ -82,6 +99,7 @@ Or create a `.env` file in your plugin root (don't commit this!):
 OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
+> **Note:** Shell environment variables take precedence over `.env` file values.
 
 **Get your Weblate API token:**
 1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)
@@ -165,8 +183,8 @@ The following environment variables control advanced behaviour:
   ```
 
 - **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
-  Comma-separated list of language codes to skip during translation, upload, and download.
-  These languages are typically handled by human translators.
+  Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
+  These languages are typically handled by human translators on Weblate.
   The default skipped languages are merged with any custom ones you specify.
 
   ```bash
@@ -245,21 +263,67 @@ vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
 
 # Upload specific languages only (no AI translation)
 vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
+
+# Repair malformed plural entries in existing .po files
+vendor/bin/publishpress-translate --repair-plurals
 ```
+
+#### 4. Repair Malformed Plural Entries
+
+If you have existing `.po` files with malformed plural entries (a known issue with older Potomatic versions where `msgstr[0]` contains `"singular|plural"` instead of separate `msgstr[0]`/`msgstr[1]` lines), you can fix them:
+
+```bash
+# Scan and repair all .po files in the languages directory
+vendor/bin/publishpress-translate --repair-plurals
+```
+
+**What this fixes:**
+- Detects plural entries where `msgstr[0]` contains pipe-delimited forms
+- Splits them into proper separate `msgstr[N]` lines 
+- Regenerates corresponding `.mo` files
+- Reports which files were repaired
+
+**Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 
 ### Default Languages
 
 The tool translates into these languages by default:
+- Arabic (ar)
+- Bulgarian (bg_BG)
+- Catalan (ca)
+- Czech (cs_CZ)
+- Danish (da_DK)
 - German (de_DE)
-- Indonesian (id_ID)
-- Filipino (fil)
-- Russian (ru_RU)
-- Yoruba (yo)
+- Greek (el)
+- Estonian (et_EE)
+- Persian (fa_IR)
 - Finnish (fi)
+- Filipino (fil)
+- Hebrew (he_IL)
+- Croatian (hr)
+- Hungarian (hu_HU)
+- Indonesian (id_ID)
 - Japanese (ja)
 - Korean (ko_KR)
+- Lithuanian (lt_LT)
+- Norwegian Bokmål (nb_NO)
+- Dutch (nl_NL)
+- Polish (pl_PL)
+- Portuguese (Portugal) (pt_PT)
+- Romanian (ro_RO)
+- Russian (ru_RU)
+- Slovak (sk_SK)
+- Slovenian (sl_SI)
+- Swedish (sv_SE)
+- Thai (th)
+- Turkish (tr_TR)
+- Ukrainian (uk)
+- Vietnamese (vi)
+- Yoruba (yor)
+- Chinese (China) (zh_CN)
+- Chinese (Taiwan) (zh_TW)
 
 ### Skipped Languages
  
