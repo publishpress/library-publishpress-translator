@@ -951,7 +951,7 @@ class WeblateClient
             'he'    => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
             'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
             'ja'    => 'nplurals=1; plural=0;',
-            'yo'    => 'nplurals=1; plural=0;',
+            'yor'   => 'nplurals=1; plural=0;',
             'fil'   => 'nplurals=2; plural=n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9);',
             'fa'    => 'nplurals=2; plural=(n > 1);',
             'fa_IR' => 'nplurals=2; plural=(n > 1);',
