@@ -51,7 +51,33 @@ class Translator
         'yor',
         'fi',
         'ja',
-        'ko_KR'
+        'ko_KR',
+        'nl_NL',
+        'pl_PL',
+        'tr_TR',
+        'vi',
+        'fa_IR',
+        'cs_CZ',
+        'pt_PT',
+        'zh_CN',
+        'sv_SE',
+        'hu_HU',
+        'da_DK',
+        'ar',
+        'he_IL',
+        'ro_RO',
+        'el',
+        'th',
+        'zh_TW',
+        'sk_SK',
+        'uk',
+        'nb_NO',
+        'bg_BG',
+        'hr',
+        'ca',
+        'lt_LT',
+        'et_EE',
+        'sl_SI'
     ];
 
     /**
@@ -253,6 +279,7 @@ class Translator
         static $scriptMap = [
             'zh_Hans' => 'zh_CN',
             'zh_Hant' => 'zh_TW',
+            'yo' => 'yor',
         ];
         if (isset($scriptMap[$code])) {
             return $scriptMap[$code];
@@ -273,7 +300,7 @@ class Translator
         }
 
         // Languages that WordPress uses without region codes
-        $baseLanguages = ['ja', 'fil', 'yor', 'fi', 'ca'];
+        $baseLanguages = ['ja', 'fil', 'yor', 'fi', 'ca', 'vi', 'ar', 'el', 'th', 'uk', 'hr'];
         if (in_array($lang, $baseLanguages)) {
             return $lang;
         }
@@ -285,11 +312,7 @@ class Translator
             'nn' => 'nn_NO',
             'sr' => 'sr_RS',
             'he' => 'he_IL',
-            'ar' => 'ar_SA',
             'hi' => 'hi_IN',
-            'vi' => 'vi_VN',
-            'el' => 'el_GR',
-            'uk' => 'uk_UA',
             'cs' => 'cs_CZ',
             'da' => 'da_DK',
             'sv' => 'sv_SE',

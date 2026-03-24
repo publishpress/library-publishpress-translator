@@ -474,6 +474,9 @@ class WeblateClient
             if ($wpLangCode === 'by') {
                 return 'be';
             }
+            if ($wpLangCode === 'yor') {
+                return 'yo';
+            }
             return strtolower($wpLangCode);
         }
 
@@ -960,6 +963,19 @@ class WeblateClient
             'pt_PT' => 'nplurals=2; plural=n > 1;',
             'tr'    => 'nplurals=2; plural=(n != 1);',
             'tr_TR' => 'nplurals=2; plural=(n != 1);',
+            'th'    => 'nplurals=1; plural=0;',
+            'vi'    => 'nplurals=1; plural=0;',
+            'zh_CN' => 'nplurals=1; plural=0;',
+            'zh_TW' => 'nplurals=1; plural=0;',
+            'ko_KR' => 'nplurals=1; plural=0;',
+            'ar'    => 'nplurals=6; plural=(n == 0 ? 0 : n == 1 ? 1 : n == 2 ? 2 : n % 100 >= 3 && n % 100 <= 10 ? 3 : n % 100 >= 11 ? 4 : 5);',
+            'pl_PL' => 'nplurals=3; plural=(n == 1 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);',
+            'hr'    => 'nplurals=3; plural=(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);',
+            'cs_CZ' => 'nplurals=3; plural=(n == 1) ? 0 : (n >= 2 && n <= 4) ? 1 : 2;',
+            'sk_SK' => 'nplurals=3; plural=(n == 1) ? 0 : (n >= 2 && n <= 4) ? 1 : 2;',
+            'uk'    => 'nplurals=3; plural=(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);',
+            'ru_RU' => 'nplurals=3; plural=(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);',
+            'lt_LT' => 'nplurals=3; plural=(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);',
 
         ];
 
