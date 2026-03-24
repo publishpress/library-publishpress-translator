@@ -97,6 +97,7 @@ $options = getopt('', [
     'languages:',
     'download',
     'upload',
+    'repair-plurals',
     'help',
 ]);
 
@@ -117,6 +118,7 @@ Options:
   --languages=LANGS      Comma-separated language codes (default: all configured)
   --download             Download translations from Weblate (instead of generating)
   --upload               Upload existing translations to Weblate (no AI translation)
+  --repair-plurals       Repair malformed plural entries in existing .po files
   --help                 Show this help message
 
 Examples:
@@ -126,6 +128,7 @@ Examples:
   publishpress-translate --force                   # Force re-translate all
   publishpress-translate --download                # Download from Weblate
   publishpress-translate --upload                  # Upload existing translations to Weblate
+  publishpress-translate --repair-plurals           # Fix malformed plural entries in .po files
 
 Environment Variables:
   OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
@@ -158,7 +161,9 @@ try {
     }
 
     // Check mode
-    if (isset($options['download'])) {
+    if (isset($options['repair-plurals'])) {
+        $result = $translator->repairPluralEntries();
+    } elseif (isset($options['download'])) {
         $result = $translator->downloadFromWeblate();
     } elseif (isset($options['upload'])) {
         $result = $translator->uploadToWeblate();

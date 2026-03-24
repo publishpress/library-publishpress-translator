@@ -42,7 +42,8 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         "translate:upload": "vendor/bin/publishpress-translate --upload",
         "translate:custom": "vendor/bin/publishpress-translate --languages",
         "translate:force": "vendor/bin/publishpress-translate --force",
-        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages"
+        "translate:force-custom": "vendor/bin/publishpress-translate --force --languages",
+        "translate:repair-plurals": "php vendor/bin/publishpress-translate --repair-plurals",
     }
 }
 ```
@@ -262,7 +263,27 @@ vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
 
 # Upload specific languages only (no AI translation)
 vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
+
+# Repair malformed plural entries in existing .po files
+vendor/bin/publishpress-translate --repair-plurals
 ```
+
+#### 4. Repair Malformed Plural Entries
+
+If you have existing `.po` files with malformed plural entries (a known issue with older Potomatic versions where `msgstr[0]` contains `"singular|plural"` instead of separate `msgstr[0]`/`msgstr[1]` lines), you can fix them:
+
+```bash
+# Scan and repair all .po files in the languages directory
+vendor/bin/publishpress-translate --repair-plurals
+```
+
+**What this fixes:**
+- Detects plural entries where `msgstr[0]` contains pipe-delimited forms
+- Splits them into proper separate `msgstr[N]` lines 
+- Regenerates corresponding `.mo` files
+- Reports which files were repaired
+
+**Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 
