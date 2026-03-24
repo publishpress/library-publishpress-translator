@@ -279,6 +279,7 @@ class Translator
         static $scriptMap = [
             'zh_Hans' => 'zh_CN',
             'zh_Hant' => 'zh_TW',
+            'yo' => 'yor',
         ];
         if (isset($scriptMap[$code])) {
             return $scriptMap[$code];
