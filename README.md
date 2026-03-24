@@ -294,7 +294,7 @@ The tool translates into these languages by default:
 - Indonesian (id_ID)
 - Filipino (fil)
 - Russian (ru_RU)
-- Yoruba (yo)
+- Yoruba (yor)
 - Finnish (fi)
 - Japanese (ja)
 - Korean (ko_KR)

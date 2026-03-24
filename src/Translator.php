@@ -48,7 +48,7 @@ class Translator
         'id_ID',
         'fil',
         'ru_RU',
-        'yo',
+        'yor',
         'fi',
         'ja',
         'ko_KR'
@@ -273,7 +273,7 @@ class Translator
         }
 
         // Languages that WordPress uses without region codes
-        $baseLanguages = ['ja', 'fil', 'yo', 'fi'];
+        $baseLanguages = ['ja', 'fil', 'yor', 'fi', 'ca'];
         if (in_array($lang, $baseLanguages)) {
             return $lang;
         }
@@ -299,7 +299,6 @@ class Translator
             'ur' => 'ur_PK',
             'bn' => 'bn_BD',
             'ms' => 'ms_MY',
-            'ca' => 'ca_ES',
             'eu' => 'eu_ES',
             'gl' => 'gl_ES',
         ];
