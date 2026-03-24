@@ -587,27 +587,42 @@ class Translator
                 $result[] = $line;
                 $i++;
 
-                $msgstrLines = [];
+                $msgstrEntries = [];
+                $msgstrRawLines = [];
+
                 while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
-                    $msgstrLines[(int)$m[1]] = $m[2];
+                    $idx = (int)$m[1];
+                    $value = $m[2];
+                    $rawLines = [$lines[$i]];
                     $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $value .= $cont[1];
+                        $rawLines[] = $lines[$i];
+                        $i++;
+                    }
+
+                    $msgstrEntries[$idx] = $value;
+                    $msgstrRawLines[$idx] = $rawLines;
                 }
 
                 if (
-                    isset($msgstrLines[0])
-                    && strpos($msgstrLines[0], '|') !== false
-                    && $this->allPluralFormsEmptyExcept($msgstrLines, 0)
+                    isset($msgstrEntries[0])
+                    && strpos($msgstrEntries[0], '|') !== false
+                    && $this->allPluralFormsEmptyExcept($msgstrEntries, 0)
                 ) {
-                    $forms = array_map('trim', explode('|', $msgstrLines[0]));
-                    $nplurals = max(count($msgstrLines), count($forms));
+                    $forms = array_map('trim', explode('|', $msgstrEntries[0]));
+                    $nplurals = max(count($msgstrEntries), count($forms));
 
-                    for ($idx = 0; $idx < $nplurals; $idx++) {
-                        $result[] = 'msgstr[' . $idx . '] "' . ($forms[$idx] ?? '') . '"';
+                    for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
+                        $result[] = 'msgstr[' . $formIdx . '] "' . ($forms[$formIdx] ?? '') . '"';
                     }
                     $modified = true;
                 } else {
-                    foreach ($msgstrLines as $idx => $val) {
-                        $result[] = 'msgstr[' . $idx . '] "' . $val . '"';
+                    foreach ($msgstrRawLines as $rawLines) {
+                        foreach ($rawLines as $rawLine) {
+                            $result[] = $rawLine;
+                        }
                     }
                 }
 
