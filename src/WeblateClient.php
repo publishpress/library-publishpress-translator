@@ -474,6 +474,9 @@ class WeblateClient
             if ($wpLangCode === 'by') {
                 return 'be';
             }
+            if ($wpLangCode === 'yor') {
+                return 'yo';
+            }
             return strtolower($wpLangCode);
         }
 
