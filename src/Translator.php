@@ -1399,7 +1399,7 @@ class Translator
         if (!$this->isValidMoContent($mo)) {
             fwrite(STDERR, "Warning: MO content is invalid for {$poFile} — proceeding to write temp file\n");
         } else {
-            fwrite(STDERR, "Notice: MO content looks valid for {$poFile}\n");
+            fwrite(STDERR, "Checking MO file: " . basename($moFile) . "\n");
         }
 
         // 2) Write to temp file
@@ -1428,7 +1428,10 @@ class Translator
         }
 
         @chmod($moFile, 0644);
-        echo "  ✓ MO updated: " . basename($moFile) . "\n";
+        // Only print success if MO was actually invalid (so we know we fixed it)
+        if (!$this->isValidMoContent($mo)) {
+            echo "  ✓ MO updated: " . basename($moFile) . "\n";
+        }
         return true;
     }
 
