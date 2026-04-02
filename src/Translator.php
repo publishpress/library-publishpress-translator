@@ -1367,6 +1367,11 @@ class Translator
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
 
+        if ($lines === false) {
+            fwrite(STDERR, "Warning: Failed to read PO file: {$poFile}\n");
+            return false;
+        }
+
         foreach ($lines as $line) {
             $line = trim($line);
 
@@ -1389,12 +1394,64 @@ class Translator
         }
 
         $mo = $this->buildMoFile($entries);
-        $written = file_put_contents($moFile, $mo) !== false;
-        if ($written) {
-            chmod($moFile, 0644);
+
+        // 1) Validate in-memory MO first
+        if (!$this->isValidMoContent($mo)) {
+            fwrite(STDERR, "Warning: MO content is invalid for {$poFile} — proceeding to write temp file\n");
+        } else {
+            fwrite(STDERR, "Notice: MO content looks valid for {$poFile}\n");
         }
 
-        return $written;
+        // 2) Write to temp file
+        $dir = dirname($moFile);
+        $tmpFile = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . basename($moFile) . '.' . uniqid('tmp_', true);
+
+        if (file_put_contents($tmpFile, $mo) === false) {
+            fwrite(STDERR, "Error: Failed to write temp MO file {$tmpFile}\n");
+            @unlink($tmpFile);
+            return false;
+        }
+
+        // 3) Double-check the temp file is sane
+        $tmpContent = @file_get_contents($tmpFile);
+        if (!$this->isValidMoContent($tmpContent)) {
+            fwrite(STDERR, "Error: Temp MO file corrupted — deleting temp file, using old .mo\n");
+            @unlink($tmpFile);
+            return false;
+        }
+
+        // 4) Atomic rename (only if temp file is valid)
+        if (!@rename($tmpFile, $moFile)) {
+            fwrite(STDERR, "Error: Failed to replace {$moFile} with temp file\n");
+            @unlink($tmpFile);
+            return false;
+        }
+
+        @chmod($moFile, 0644);
+        echo "  ✓ MO updated: " . basename($moFile) . "\n";
+        return true;
+    }
+
+    private function isValidMoContent($mo): bool
+    {
+        if (!is_string($mo)) {
+            fwrite(STDERR, "Debug: MO is not a string\n");
+            return false;
+        }
+
+        if (strlen($mo) < 28) {
+            fwrite(STDERR, "Debug: MO too small (" . strlen($mo) . " bytes)\n");
+            return false;
+        }
+
+        $magicBytes = substr($mo, 0, 4);
+        $valid = $magicBytes === "\xDE\x12\x04\x95" || $magicBytes === "\x95\x04\x12\xDE";
+
+        if (!$valid) {
+            fwrite(STDERR, "Debug: MO magic bytes invalid\n");
+        }
+
+        return $valid;
     }
 
     /**
