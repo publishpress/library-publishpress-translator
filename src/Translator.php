@@ -716,15 +716,15 @@ class Translator
         $possiblePaths = [];
 
         if ($isDevWorkspace) {
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
         } else {
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
         }
 
         // Always check library's own potomatic (for development)
-        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic';
+        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic.js';
 
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
