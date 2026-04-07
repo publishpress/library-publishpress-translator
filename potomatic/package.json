@@ -26,12 +26,12 @@
 		"url": "https://github.com/GravityKit/Potomatic.git"
 	},
 	"type": "module",
-	"main": "potomatic",
+	"main": "potomatic.js",
 	"bin": {
-		"potomatic": "./potomatic"
+		"potomatic": "./potomatic.js"
 	},
 	"scripts": {
-		"translate": "./potomatic",
+		"translate": "./potomatic.js",
 		"ab-prompt-test": "node tools/ab-prompt-test",
 		"test": "vitest run",
 		"test:watch": "vitest",
