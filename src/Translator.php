@@ -1305,6 +1305,7 @@ class Translator
                         $this->validatePluralEntries($poFile);
 
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        $this->weblateClient->removeDuplicateReferences($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
                         
@@ -1670,6 +1671,7 @@ class Translator
                     foreach ($poFiles as $poFile) {
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                            $this->weblateClient->removeDuplicateReferences($poFile);
                         }
 
                         $this->repairPluralPipeDelimitedEntries($poFile);

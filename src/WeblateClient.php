@@ -619,7 +619,7 @@ class WeblateClient
      * @param string $poFilePath
      * @return void
      */
-    private function removeDuplicateReferences($poFilePath)
+    public function removeDuplicateReferences($poFilePath)
     {
         $content = @file_get_contents($poFilePath);
         if ($content === false || $content === '') {
