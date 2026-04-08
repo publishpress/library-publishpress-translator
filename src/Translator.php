@@ -1443,6 +1443,14 @@ class Translator
                 $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
             } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
                 $currentEntry['msgstr'] = $this->extractString($line);
+            } elseif ($line[0] === '"' && $currentEntry !== null) {
+                // Handle continuation lines (multi-line strings)
+                $continuationText = $this->extractString($line);
+                if ($currentEntry['msgstr'] !== '') {
+                    $currentEntry['msgstr'] .= $continuationText;
+                } else if ($currentEntry['msgid'] !== '') {
+                    $currentEntry['msgid'] .= $continuationText;
+                }
             }
         }
 
