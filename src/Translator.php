@@ -586,7 +586,11 @@ class Translator
     }
 
     /**
-     * Repair plural entries where msgstr[0] contains pipe-delimited forms.
+     * Repair plural entries where msgstr entries contain pipe-delimited forms.
+     * 
+     * Handles cases where the AI generated malformed plurals like:
+     * msgstr[0] "singular|plural"
+     * msgstr[1] "plural|plural"
      *
      * @param string $poFile Path to PO file
      */
@@ -603,7 +607,8 @@ class Translator
         $modified = false;
 
         for ($i = 0; $i < $count; $i++) {
-            $line = $lines[$i];
+            // Remove carriage returns to handle both Unix (LF) and Windows (CRLF) line endings
+            $line = rtrim($lines[$i], "\r");
 
             if (preg_match('/^msgid_plural\s+"(.*)"$/', $line)) {
                 $result[] = $line;
@@ -612,15 +617,23 @@ class Translator
                 $msgstrEntries = [];
                 $msgstrRawLines = [];
 
-                while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
+                // Collect all msgstr[n] entries, handling multiline strings properly
+                while ($i < $count && preg_match('/^msgstr\[(\d+)\]/', rtrim($lines[$i], "\r"), $m)) {
                     $idx = (int)$m[1];
-                    $value = $m[2];
-                    $rawLines = [$lines[$i]];
+                    $rawLineOriginal = rtrim($lines[$i], "\r");
+                    $rawLines = [$rawLineOriginal];
                     $i++;
 
-                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    // Extract the initial value on the msgstr[n] line
+                    if (preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $rawLineOriginal, $match)) {
+                        $value = $match[1];
+                    } else {
+                        $value = '';
+                    }
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
                         $value .= $cont[1];
-                        $rawLines[] = $lines[$i];
+                        $rawLines[] = rtrim($lines[$i], "\r");
                         $i++;
                     }
 
@@ -628,16 +641,30 @@ class Translator
                     $msgstrRawLines[$idx] = $rawLines;
                 }
 
-                if (
-                    isset($msgstrEntries[0])
-                    && strpos($msgstrEntries[0], '|') !== false
-                    && $this->allPluralFormsEmptyExcept($msgstrEntries, 0)
-                ) {
-                    $forms = array_map('trim', explode('|', $msgstrEntries[0]));
+                // Check if ANY msgstr entry contains pipe-delimited forms
+                $hasPipedEntry = false;
+                $sourcePipeEntry = null;
+                
+                foreach ($msgstrEntries as $idx => $value) {
+                    if (strpos($value, '|') !== false) {
+                        $hasPipedEntry = true;
+                        // Use the first piped entry as the source for splitting
+                        if ($sourcePipeEntry === null) {
+                            $sourcePipeEntry = $value;
+                        }
+                        break;
+                    }
+                }
+
+                if ($hasPipedEntry && $sourcePipeEntry !== null) {
+                    $forms = array_map('trim', explode('|', $sourcePipeEntry));
+                    
                     $nplurals = max(count($msgstrEntries), count($forms));
 
                     for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
-                        $result[] = 'msgstr[' . $formIdx . '] "' . ($forms[$formIdx] ?? '') . '"';
+                        $formValue = $forms[$formIdx] ?? '';
+                        $formValue = addcslashes($formValue, '"\\');
+                        $result[] = 'msgstr[' . $formIdx . '] "' . $formValue . '"';
                     }
                     $modified = true;
                 } else {
@@ -661,22 +688,48 @@ class Translator
     }
 
     /**
-     * Check if all plural forms except the given index are empty
+     * Validate PO file for pipe-delimited plural entries
+     * Logs warnings if malformed entries are detected
      *
-     * @param array $msgstrLines Associative array of index => value
-     * @param int   $exceptIndex Index to skip
-     * @return bool
+     * @param string $poFile Path to PO file to validate
+     * @return bool True if file is clean, false if issues found
      */
-    private function allPluralFormsEmptyExcept(array $msgstrLines, int $exceptIndex)
+    private function validatePluralEntries($poFile)
     {
-        foreach ($msgstrLines as $idx => $val) {
-            if ($idx === $exceptIndex) {
-                continue;
-            }
-            if ($val !== '') {
-                return false;
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return true;
+        }
+
+        $lines = explode("\n", $content);
+        $issues = 0;
+        $lineNum = 0;
+
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = rtrim($lines[$i], "\r");
+            $lineNum++;
+
+            if (preg_match('/^msgstr\[\d+\]\s+"(.*)"/', $line, $match)) {
+                $value = $match[1];
+
+                while ($i + 1 < count($lines) && preg_match('/^"(.*)"/', rtrim($lines[$i + 1], "\r"), $cont)) {
+                    $value .= $cont[1];
+                    $i++;
+                }
+
+                if (strpos($value, '|') !== false) {
+                    echo "  ⚠️  WARNING: Pipe-delimited msgstr at line " . ($lineNum) . ": " . substr($value, 0, 80) . "...\n";
+                    $issues++;
+                }
             }
         }
+
+        if ($issues > 0) {
+            echo "  ⚠️  Found $issues malformed plural entries. Running repair...\n";
+            $this->repairPluralPipeDelimitedEntries($poFile);
+            return false;
+        }
+
         return true;
     }
 
@@ -931,6 +984,9 @@ class Translator
             $languageCode = $matches[1];
 
             echo "    → Preparing {$languageCode}\n";
+
+            // Validate no malformed plural entries before uploading
+            $this->validatePluralEntries($poFile);
 
             $uploaded = false;
             $maxRetries = 3;
@@ -1241,6 +1297,9 @@ class Translator
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.po';
                         file_put_contents($poFile, $poContent);
                         chmod($poFile, 0644);
+
+                        // Validate for malformed plural entries and repair if needed
+                        $this->validatePluralEntries($poFile);
 
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         
@@ -1603,6 +1662,9 @@ class Translator
                         }
 
                         $this->repairPluralPipeDelimitedEntries($poFile);
+                        
+                        // Validate no malformed entries remain
+                        $this->validatePluralEntries($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
                         
