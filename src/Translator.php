@@ -290,7 +290,10 @@ class Translator
 
         $lang = strtolower($code);
 
-        if (is_dir($this->languagesDir)) {
+        // Only search for existing regional variants if languages weren't explicitly set.
+        // When custom target languages are specified, respect them as-is to avoid creating
+        // unintended regional variants
+        if (!$this->customTargetLanguages && is_dir($this->languagesDir)) {
             $files = glob($this->languagesDir . "/*-{$lang}_*.po");
             if ($files) {
                 if (preg_match('/-(' . preg_quote($lang, '/') . '_[A-Z]{2,})\.po$/', $files[0], $m)) {
