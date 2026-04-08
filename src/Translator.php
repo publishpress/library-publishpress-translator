@@ -586,6 +586,181 @@ class Translator
     }
 
     /**
+     * Revert translations for dictionary words in PO file
+     *
+     * This handles terms from:
+     * - config/dictionaries.json
+     * - composer.json extra.plugin_name
+     * - TRANSLATION_OVERRIDES environment variable
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function revertDictionaryTranslations($poFile)
+    {
+        $dictionary = $this->getDictionaryTermsForExclusion();
+        if (empty($dictionary)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $i = 0;
+        $modified = false;
+
+        while ($i < count($lines)) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
+                $msgid = stripcslashes($msgidMatch[1]);  // Unescape PO format
+
+                // Check if this msgid is in the dictionary
+                if (isset($dictionary[$msgid]) && $i + 1 < count($lines)) {
+                    $nextLine = $lines[$i + 1];
+
+                    // Handle single-line msgstr
+                    if (preg_match('/^msgstr\s+"(.*?)"$/', $nextLine)) {
+                        $expectedValue = $dictionary[$msgid];
+                        $escapedValue = addcslashes($expectedValue, '"\\');
+                        $expectedMsgstr = 'msgstr "' . $escapedValue . '"';
+
+                        // Only revert if msgstr differs from dictionary value
+                        if ($nextLine !== $expectedMsgstr) {
+                            $result[] = $line;
+                            $result[] = $expectedMsgstr;
+                            $i += 2;
+                            $modified = true;
+                            continue;
+                        }
+                    }
+                    // Handle multiline msgstr
+                    elseif (preg_match('/^msgstr\s+""$/', $nextLine)) {
+                        $msgstrLines = [$nextLine];
+                        $j = $i + 2;
+                        
+                        while ($j < count($lines) && preg_match('/^\s*"/', $lines[$j])) {
+                            $msgstrLines[] = $lines[$j];
+                            $j++;
+                        }
+                        
+                        // Reconstruct multiline msgstr into single string
+                        $fullMsgstr = '';
+                        foreach ($msgstrLines as $msgstrLine) {
+                            if (preg_match('/^\s*"(.*)"/', $msgstrLine, $m)) {
+                                $fullMsgstr .= stripcslashes($m[1]);
+                            }
+                        }
+                        
+                        // Only revert if msgstr differs from dictionary value
+                        if ($fullMsgstr !== $dictionary[$msgid]) {
+                            $result[] = $line;
+                            $expectedValue = $dictionary[$msgid];
+                            $escapedValue = addcslashes($expectedValue, '"\\');
+                            $result[] = 'msgstr "' . $escapedValue . '"';
+                            $i = $j;
+                            $modified = true;
+                            continue;
+                        }
+                        
+                        // Skip the collected multiline msgstr
+                        $i = $j;
+                    }
+                }
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        if ($modified) {
+            if (@file_put_contents($poFile, implode("\n", $result)) === false) {
+                fwrite(STDERR, "Warning: Failed to write reverted dictionary translations to {$poFile}\n");
+            }
+        }
+    }
+
+    /**
+     * Get all dictionary terms for exclusion
+     * Combines config/dictionaries.json, plugin name, and TRANSLATION_OVERRIDES
+     *
+     * @return array Dictionary terms (key-value pairs)
+     */
+    private function getDictionaryTermsForExclusion(): array
+    {
+        $dictionary = [];
+
+        // Load config/dictionaries.json if it exists
+        $configDictPath = $this->pluginRoot . '/config/dictionaries.json';
+        if (file_exists($configDictPath)) {
+            $configContent = @file_get_contents($configDictPath);
+            if ($configContent) {
+                $configDict = @json_decode($configContent, true);
+                if (is_array($configDict)) {
+                    // Flatten nested dictionary structure
+                    foreach ($configDict as $key => $value) {
+                        if (is_array($value)) {
+                            $dictionary = array_merge($dictionary, $value);
+                        } else {
+                            $dictionary[$key] = $value;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add plugin name if configured
+        $pluginName = $this->getPluginNameForExclusion();
+        if ($pluginName) {
+            $dictionary[$pluginName] = $pluginName;
+        }
+
+        // Add TRANSLATION_OVERRIDES if set
+        $raw = getenv('TRANSLATION_OVERRIDES');
+        if ($raw) {
+            $overrides = $this->parseTranslationOverrides($raw);
+            if (!empty($overrides)) {
+                $dictionary = array_merge($dictionary, $overrides);
+            }
+        }
+
+        return $dictionary;
+    }
+
+    /**
+     * Clean up temporary dictionary directory
+     *
+     * @return void
+     */
+    private function cleanupTemporaryDictionaryDirectory(): void
+    {
+        $baseDir = dirname(__DIR__) . '/translations-override';
+        
+        if (!is_dir($baseDir)) {
+            return;
+        }
+
+        $dictFile = $baseDir . '/dictionary.json';
+        if (file_exists($dictFile)) {
+            @unlink($dictFile);
+        }
+
+        if (is_dir($baseDir)) {
+            $files = @scandir($baseDir);
+            if ($files === false) {
+                return;
+            }
+
+            if (count($files) === 2 && in_array('.', $files) && in_array('..', $files)) {
+                @rmdir($baseDir);
+            }
+        }
+    }
+
+    /**
      * Repair plural entries where msgstr[0] contains pipe-delimited forms.
      *
      * @param string $poFile Path to PO file
@@ -775,6 +950,79 @@ class Translator
         return getenv('OPENAI_API_KEY') ?: null;
     }
 
+    private function parseTranslationOverrides(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $result = [];
+        $parts = array_filter(array_map('trim', explode(',', $raw)), static function ($v) {
+            return $v !== '';
+        });
+
+        foreach ($parts as $part) {
+            $eqPos = strpos($part, '=');
+            if ($eqPos === false) {
+                $source = trim($part);
+                $target = trim($part);
+            } else {
+                $source = trim(substr($part, 0, $eqPos));
+                $target = trim(substr($part, $eqPos + 1));
+            }
+
+            // Skip empty keys or values after trimming
+            if ($source === '' || $target === '') {
+                continue;
+            }
+
+            $result[$source] = $target;
+        }
+
+        return $result;
+    }
+
+    private function ensurePotomaticOverridesDictionary(): ?string
+    {
+        $dictionary = $this->getDictionaryTermsForExclusion();
+        
+        if (empty($dictionary)) {
+            return null;
+        }
+
+        // Create temporary directory for dictionary in the library root
+        $baseDir = dirname(__DIR__) . '/translations-override';
+        if (!is_dir($baseDir)) {
+            if (@mkdir($baseDir, 0755, true) === false) {
+                return null;
+            }
+        }
+
+        // Verify directory is writable
+        if (!is_writable($baseDir)) {
+            return null;
+        }
+
+        // Write merged dictionary file
+        $dictFile = $baseDir . '/dictionary.json';
+        $jsonContent = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_ERROR_INF_AS_NULL);
+        
+        if ($jsonContent === false) {
+            return null; 
+        }
+        
+        if (@file_put_contents($dictFile, $jsonContent) === false) {
+            return null;
+        }
+
+        if (!file_exists($dictFile) || !is_readable($dictFile)) {
+            return null;
+        }
+
+        return $baseDir;
+    }
+
     /**
      * Build Potomatic command
      *
@@ -815,6 +1063,12 @@ class Translator
         $apiKey = $this->getApiKey();
         if ($apiKey) {
             $cmd .= ' --api-key ' . escapeshellarg($apiKey);
+        }
+
+        $overridesDictionaryDir = $this->ensurePotomaticOverridesDictionary();
+        if ($overridesDictionaryDir) {
+            $cmd .= ' --use-dictionary';
+            $cmd .= ' --dictionary-path ' . escapeshellarg($overridesDictionaryDir);
         }
 
         return $cmd;
@@ -1097,6 +1351,9 @@ class Translator
         echo str_repeat('=', 50) . "\n";
         echo "✨ Upload " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
 
+        // Clean up temporary dictionary directory
+        $this->cleanupTemporaryDictionaryDirectory();
+
         return $success;
     }
 
@@ -1246,6 +1503,8 @@ class Translator
                         
                         $this->revertPluginNameTranslations($poFile);
                         
+                        $this->revertDictionaryTranslations($poFile);
+                        
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
 
@@ -1276,6 +1535,9 @@ class Translator
             echo str_repeat('=', 50) . "\n";
             echo "✨ Downloaded {$totalDownloaded} translation files!\n\n";
         }
+
+        // Clean up temporary dictionary directory
+        $this->cleanupTemporaryDictionaryDirectory();
 
         return $success;
     }
@@ -1606,6 +1868,8 @@ class Translator
                         
                         $this->revertPluginNameTranslations($poFile);
                         
+                        $this->revertDictionaryTranslations($poFile);
+                        
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
 
                         $baseName = basename($poFile, '.po');
@@ -1642,6 +1906,9 @@ class Translator
 
         echo str_repeat('=', 50) . "\n";
         echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
+
+        // Clean up temporary dictionary directory
+        $this->cleanupTemporaryDictionaryDirectory();
 
         return $success;
     }

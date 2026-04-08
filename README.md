@@ -191,6 +191,92 @@ The following environment variables control advanced behaviour:
   export SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR
   ```
 
+### Excluding Words from Translation
+
+The translation library automatically excludes certain terms from being translated. You can add your own exclusions too.
+
+#### Built-in Dictionary (Always Applied)
+
+The library includes a built-in `config/dictionaries.json` with pre-defined terms that are automatically excluded from translation in ALL languages:
+
+**Brand Terms (automatically excluded):**
+- PublishPress
+- TaxoPress
+- Tag-Groups
+- MetaSlider
+- WordPress
+- WooCommerce
+- Lightbox
+
+**Technical Terms (automatically excluded):**
+- taxonomy
+- taxonomies
+- post type
+- custom field
+- shortcode
+- widget
+- admin
+- dashboard
+
+#### Adding Custom Exclusions with TRANSLATION_OVERRIDES
+
+Add the `TRANSLATION_OVERRIDES` variable to your plugin's `.env` file to exclude additional words:
+
+**Add to `.env` in your plugin:**
+
+```env
+
+# List of keywords to not be translated
+TRANSLATION_OVERRIDES="shortlink,shortlinks,metaslider,capabilities"
+
+```
+
+**Format options:**
+- `term` - Prevents "term" from being translated (keeps original)
+- `term=Custom Form` - Uses "Custom Form" as the untranslated value
+
+**Examples:**
+
+```env
+# Simple exclusions
+TRANSLATION_OVERRIDES="Dashboard,Admin Panel,REST API"
+
+# With custom forms
+TRANSLATION_OVERRIDES="post type=Post Type, custom field=Custom Field, rest api=REST API"
+
+# Mixed (simple + custom forms)
+TRANSLATION_OVERRIDES="Dashboard, post type=Post Type, lightbox, advanced settings=Advanced Settings"
+```
+
+**From CLI:**
+
+Linux/Mac:
+```bash
+export TRANSLATION_OVERRIDES="shortlink,shortlinks"
+composer translate
+```
+
+Windows PowerShell:
+```powershell
+$env:TRANSLATION_OVERRIDES = "shortlink,shortlinks"
+composer translate
+```
+
+Windows CMD:
+```cmd
+set TRANSLATION_OVERRIDES=shortlink,shortlinks
+composer translate
+```
+
+#### How It Works
+
+When translating:
+1. Built-in dictionary from the library is loaded
+2. `TRANSLATION_OVERRIDES` from `.env` is loaded (if available)
+3. Both are merged into a single dictionary
+4. The complete dictionary is passed to Potomatic
+5. Potomatic excludes ALL these terms in every target language
+
 ### Complete Translation Workflow
 
 #### 1. Run Translation (Full Cycle)

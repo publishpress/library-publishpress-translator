@@ -5,7 +5,8 @@
         "Tag-Groups": "Tag-Groups",
         "MetaSlider": "MetaSlider",
         "WordPress": "WordPress",
-        "WooCommerce": "WooCommerce"
+        "WooCommerce": "WooCommerce",
+        "Lightbox": "Lightbox"
     },
     "technical_terms": {
         "taxonomy": "taxonomy",
