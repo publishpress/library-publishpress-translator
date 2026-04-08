@@ -743,21 +743,30 @@ class Translator
             return;
         }
 
+        echo "🧹 Deleting temporary directory for keywords exclusion...\n";
+
+        // Remove dictionary.json file if it exists
+        // This is the ONLY file we create in this directory, NOT config/dictionaries.json
         $dictFile = $baseDir . '/dictionary.json';
         if (file_exists($dictFile)) {
             @unlink($dictFile);
         }
 
+        // Try to remove the directory if it's empty
+        // Only remove if we created it (it should only contain dictionary.json)
         if (is_dir($baseDir)) {
             $files = @scandir($baseDir);
             if ($files === false) {
                 return;
             }
-
+            
+            // Check if directory only contains . and .. (empty)
             if (count($files) === 2 && in_array('.', $files) && in_array('..', $files)) {
                 @rmdir($baseDir);
             }
         }
+
+        echo "✓ Cleanup complete\n\n";
     }
 
     /**
@@ -991,35 +1000,43 @@ class Translator
             return null;
         }
 
+        echo "📚 Creating temporary directory for keywords exclusion...\n";
+
         // Create temporary directory for dictionary in the library root
         $baseDir = dirname(__DIR__) . '/translations-override';
         if (!is_dir($baseDir)) {
             if (@mkdir($baseDir, 0755, true) === false) {
+                fwrite(STDERR, "⚠️  Failed to create temporary directory for keywords exclusion, proceeding with translations\n\n");
                 return null;
             }
         }
 
         // Verify directory is writable
         if (!is_writable($baseDir)) {
+            fwrite(STDERR, "⚠️  Failed to create temporary directory for keywords exclusion, proceeding with translations\n\n");
             return null;
         }
 
         // Write merged dictionary file
         $dictFile = $baseDir . '/dictionary.json';
-        $jsonContent = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_ERROR_INF_AS_NULL);
+        $jsonContent = json_encode($dictionary, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         
         if ($jsonContent === false) {
-            return null; 
+            fwrite(STDERR, "⚠️  Failed to create temporary directory for keywords exclusion, proceeding with translations\n\n");
+            return null;  // JSON encoding failed
         }
         
         if (@file_put_contents($dictFile, $jsonContent) === false) {
+            fwrite(STDERR, "⚠️  Failed to create temporary directory for keywords exclusion, proceeding with translations\n\n");
             return null;
         }
 
         if (!file_exists($dictFile) || !is_readable($dictFile)) {
+            fwrite(STDERR, "⚠️  Failed to create temporary directory for keywords exclusion, proceeding with translations\n\n");
             return null;
         }
 
+        echo "✓ Keywords exclusion directory ready\n\n";
         return $baseDir;
     }
 
