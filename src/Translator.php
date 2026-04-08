@@ -770,6 +770,77 @@ class Translator
     }
 
     /**
+     * Remove fuzzy flag from dictionary terms
+     * Dictionary terms should never be marked as fuzzy since they are intentionally untranslated
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function removeFuzzyFromDictionaryTerms($poFile)
+    {
+        $dictionary = $this->getDictionaryTermsForExclusion();
+        if (empty($dictionary)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $i = 0;
+        $modified = false;
+
+        while ($i < count($lines)) {
+            $line = $lines[$i];
+
+            // Look for fuzzy comment line
+            if (preg_match('/^#,\s*(.*)fuzzy(.*)$/', $line, $commentMatch)) {
+                $beforeFuzzy = trim($commentMatch[1], ' ,');
+                $afterFuzzy = trim($commentMatch[2], ' ,');
+
+                // Look ahead to see if the next msgid is in our dictionary
+                $j = $i + 1;
+                while ($j < count($lines) && preg_match('/^\s*(?:#|$)/', $lines[$j])) {
+                    $j++;
+                }
+
+                if ($j < count($lines) && preg_match('/^msgid\s+"(.+)"$/', $lines[$j], $msgidMatch)) {
+                    $msgid = stripcslashes($msgidMatch[1]);
+
+                    // If this msgid is in the dictionary, remove fuzzy
+                    if (isset($dictionary[$msgid])) {
+                        // Reconstruct the comment without "fuzzy"
+                        $commentParts = array_filter([$beforeFuzzy, $afterFuzzy]);
+                        if (empty($commentParts)) {
+                            // No other flags, skip the entire comment line
+                            $i++;
+                            $modified = true;
+                            continue;
+                        } else {
+                            // Keep other flags
+                            $result[] = '#, ' . implode(', ', $commentParts);
+                            $i++;
+                            $modified = true;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        if ($modified) {
+            if (@file_put_contents($poFile, implode("\n", $result)) === false) {
+                fwrite(STDERR, "Warning: Failed to remove fuzzy flags from dictionary terms in {$poFile}\n");
+            }
+        }
+    }
+
+    /**
      * Repair plural entries where msgstr[0] contains pipe-delimited forms.
      *
      * @param string $poFile Path to PO file
@@ -1522,6 +1593,8 @@ class Translator
                         
                         $this->revertDictionaryTranslations($poFile);
                         
+                        $this->removeFuzzyFromDictionaryTerms($poFile);
+                        
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
 
@@ -1888,6 +1961,9 @@ class Translator
                         $this->revertDictionaryTranslations($poFile);
                         
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
+
+                        // Remove fuzzy flag from dictionary terms (they're intentionally untranslated, not "fuzzy")
+                        $this->removeFuzzyFromDictionaryTerms($poFile);
 
                         $baseName = basename($poFile, '.po');
                         $moFile = $this->languagesDir . '/' . $baseName . '.mo';
