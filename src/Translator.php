@@ -245,11 +245,6 @@ class Translator
             if ($before !== $after) {
                 $baseName = basename($poFile);
                 echo "  ✓ Repaired: {$baseName}\n";
-
-                // Regenerate .mo file
-                $moFile = substr($poFile, 0, -3) . '.mo';
-                $this->convertPoToMo($poFile, $moFile);
-
                 $repaired++;
             }
         }
@@ -308,9 +303,6 @@ class Translator
             if ($before !== $after) {
                 $cleaned++;
                 echo "  ✓ Cleaned: {$baseName}\n";
-
-                $moFile = substr($poFile, 0, -3) . '.mo';
-                $this->convertPoToMo($poFile, $moFile);
             } else {
                 echo "  ⊘ Clean: {$baseName}\n";
             }
@@ -328,138 +320,92 @@ class Translator
     }
 
     /**
-     * Sync .po and generated files (.mo, .json, .l10n.php) — ensure files are in sync with .po files
+     * Check .po files and compiled format status (.mo, .json, .l10n.php)
+     * This method reports status but doesn't regenerate compiled formats.
      *
      * @return bool
      */
     public function syncPoAndMoFiles()
     {
-        echo "\n🔄 Synchronizing translation files (.po, .mo, .json, .l10n.php)\n";
+        echo "\n🔄 Checking translation file status\n";
         echo str_repeat('=', 50) . "\n\n";
         echo "Path: {$this->languagesDir}\n\n";
 
         $poFiles = glob($this->languagesDir . '/*.po') ?: [];
-        $moFiles = glob($this->languagesDir . '/*.mo') ?: [];
-        $jsonFiles = glob($this->languagesDir . '/*.json') ?: [];
-        $phpFiles = glob($this->languagesDir . '/*.l10n.php') ?: [];
 
-        $totalFiles = count($poFiles) + count($moFiles) + count($jsonFiles) + count($phpFiles);
-        if ($totalFiles === 0) {
-            fwrite(STDERR, "No translation files found in {$this->languagesDir}\n");
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
             return false;
         }
 
-        echo "Found:\n";
-        echo "  " . count($poFiles) . " .po file(s)\n";
-        echo "  " . count($moFiles) . " .mo file(s)\n";
-        echo "  " . count($jsonFiles) . " .json file(s)\n";
-        echo "  " . count($phpFiles) . " .l10n.php file(s)\n\n";
+        echo "Found " . count($poFiles) . " .po file(s):\n\n";
 
-        $regenerated = 0;
-        $orphaned = [];
-        $needsGeneration = [];
+        $missingCompiled = [];
 
-        // Check all .po files and ensure corresponding generated files are up-to-date
         foreach ($poFiles as $poFile) {
             $baseName = basename($poFile, '.po');
             $poMtime = filemtime($poFile);
 
+            echo "  📄 {$baseName}.po\n";
+
             // Check .mo file
             $moFile = $this->languagesDir . '/' . $baseName . '.mo';
             if (!file_exists($moFile)) {
-                echo "  🔨 Regenerate: {$baseName}.mo (missing)\n";
-                $this->convertPoToMo($poFile, $moFile);
-                $regenerated++;
+                echo "     ⊘ .mo (missing)\n";
+                $missingCompiled[] = $baseName . '.mo';
             } else {
                 $moMtime = filemtime($moFile);
                 if ($poMtime > $moMtime) {
-                    echo "  🔨 Regenerate: {$baseName}.mo (outdated)\n";
-                    $this->convertPoToMo($poFile, $moFile);
-                    $regenerated++;
+                    echo "     ⚠ .mo (outdated)\n";
+                    $missingCompiled[] = $baseName . '.mo';
                 } else {
-                    echo "  ✓ Synced: {$baseName}.po ↔ .mo\n";
+                    echo "     ✓ .mo (up-to-date)\n";
                 }
             }
 
             // Check .json file
             $jsonFile = $this->languagesDir . '/' . $baseName . '.json';
-            if (file_exists($jsonFile)) {
+            if (!file_exists($jsonFile)) {
+                echo "     ⊘ .json (missing)\n";
+                $missingCompiled[] = $baseName . '.json';
+            } else {
                 $jsonMtime = filemtime($jsonFile);
                 if ($poMtime > $jsonMtime) {
-                    echo "  🔨 Regenerate: {$baseName}.json (outdated)\n";
-                    $this->convertPoToJson($poFile, $jsonFile, $baseName);
-                    $regenerated++;
+                    echo "     ⚠ .json (outdated)\n";
+                    $missingCompiled[] = $baseName . '.json';
                 } else {
-                    echo "  ✓ Synced: {$baseName}.po ↔ .json\n";
+                    echo "     ✓ .json (up-to-date)\n";
                 }
             }
 
             // Check .l10n.php file
             $phpFile = $this->languagesDir . '/' . $baseName . '.l10n.php';
-            if (file_exists($phpFile)) {
+            if (!file_exists($phpFile)) {
+                echo "     ⊘ .l10n.php (missing)\n";
+                $missingCompiled[] = $baseName . '.l10n.php';
+            } else {
                 $phpMtime = filemtime($phpFile);
                 if ($poMtime > $phpMtime) {
-                    echo "  🔨 Regenerate: {$baseName}.l10n.php (outdated)\n";
-                    $this->convertPoToL10nPhp($poFile, $phpFile, $baseName);
-                    $regenerated++;
+                    echo "     ⚠ .l10n.php (outdated)\n";
+                    $missingCompiled[] = $baseName . '.l10n.php';
                 } else {
-                    echo "  ✓ Synced: {$baseName}.po ↔ .l10n.php\n";
+                    echo "     ✓ .l10n.php (up-to-date)\n";
                 }
             }
+
+            echo "\n";
         }
 
-        // Find orphaned .mo files
-        if (!empty($moFiles)) {
-            foreach ($moFiles as $moFile) {
-                $poFile = substr($moFile, 0, -3) . '.po';
-                if (!file_exists($poFile)) {
-                    $orphaned[] = basename($moFile);
-                }
+        echo str_repeat('=', 50) . "\n";
+
+        if (!empty($missingCompiled)) {
+            echo "\n⚠️  Found " . count($missingCompiled) . " file(s) that need compilation:\n";
+            foreach ($missingCompiled as $file) {
+                echo "  - {$file}\n";
             }
-        }
-
-        // Find orphaned .json files
-        if (!empty($jsonFiles)) {
-            foreach ($jsonFiles as $jsonFile) {
-                $poFile = substr($jsonFile, 0, -5) . '.po';
-                if (!file_exists($poFile)) {
-                    $orphaned[] = basename($jsonFile);
-                }
-            }
-        }
-
-        // Find orphaned .l10n.php files
-        if (!empty($phpFiles)) {
-            foreach ($phpFiles as $phpFile) {
-                $poFile = str_replace('.l10n.php', '.po', $phpFile);
-                if (!file_exists($poFile)) {
-                    $orphaned[] = basename($phpFile);
-                }
-            }
-        }
-
-        echo "\n" . str_repeat('=', 50) . "\n";
-
-        if ($regenerated > 0) {
-            echo "✨ Regenerated {$regenerated} file(s) to match .po files.\n";
+            echo "\nRun 'composer translate:compile' to compile these files from their .po sources.\n";
         } else {
-            echo "✨ All translation files are up-to-date.\n";
-        }
-
-        if (!empty($needsGeneration)) {
-            echo "\n⚠️  Found " . count($needsGeneration) . " file(s) that need regeneration:\n";
-            foreach ($needsGeneration as $file) {
-                echo "  - {$file}\n";
-            }
-            echo "\nRun 'composer translate:compile' to regenerate these files from their .po sources.\n";
-        }
-
-        if (!empty($orphaned)) {
-            echo "\n⚠️  Found " . count($orphaned) . " orphaned file(s) without corresponding .po:\n";
-            foreach ($orphaned as $file) {
-                echo "  - {$file}\n";
-            }
-            echo "\nConsider removing these files or recreating their .po sources.\n";
+            echo "\n✨ All translation files are up-to-date.\n";
         }
 
         echo "\n";
@@ -1511,9 +1457,6 @@ class Translator
                         $this->weblateClient->removeDuplicateExtractedComments($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
-                        
-                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
 
                         if (!$silent) {
                             echo "  ✓ {$language}\n";
@@ -1618,274 +1561,6 @@ class Translator
                 echo "    ⊘ Removed duplicate {$locale}\n";
             }
         }
-    }
-
-    /**
-     * Convert PO file to MO file
-     *
-     * @param string $poFile Path to PO file
-     * @param string $moFile Path to output MO file
-     * @return bool True on success
-     */
-    private function convertPoToMo($poFile, $moFile)
-    {
-        $entries = [];
-        $currentEntry = null;
-        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if (empty($line) || $line[0] === '#') {
-                continue;
-            }
-
-            if (strpos($line, 'msgid') === 0) {
-                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-                    $entries[] = $currentEntry;
-                }
-                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
-            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
-                $currentEntry['msgstr'] = $this->extractString($line);
-            } elseif ($line[0] === '"' && $currentEntry !== null) {
-                // Handle continuation lines (multi-line strings)
-                $continuationText = $this->extractString($line);
-                if ($currentEntry['msgstr'] !== '') {
-                    $currentEntry['msgstr'] .= $continuationText;
-                } else if ($currentEntry['msgid'] !== '') {
-                    $currentEntry['msgid'] .= $continuationText;
-                }
-            }
-        }
-
-        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-            $entries[] = $currentEntry;
-        }
-
-        $mo = $this->buildMoFile($entries);
-        $written = file_put_contents($moFile, $mo) !== false;
-        if ($written) {
-            chmod($moFile, 0644);
-        }
-
-        return $written;
-    }
-
-    /**
-     * Extract string from PO line
-     *
-     * @param string $line
-     * @return string
-     */
-    private function extractString($line)
-    {
-        if (preg_match('/"(.*)"/', $line, $matches)) {
-            return stripcslashes($matches[1]);
-        }
-        return '';
-    }
-
-    /**
-     * Build MO file content
-     *
-     * @param array $entries
-     * @return string
-     */
-    private function buildMoFile($entries)
-    {
-        $magic = 0x950412de;
-        $revision = 0;
-        $count = count($entries);
-
-        $idsOffset = 28;
-        $strsOffset = $idsOffset + 8 * $count;
-
-        $ids = '';
-        $strs = '';
-        $idsIndex = [];
-        $strsIndex = [];
-
-        foreach ($entries as $entry) {
-            $idsIndex[] = [strlen($ids), strlen($entry['msgid'])];
-            $ids .= $entry['msgid'] . "\0";
-
-            $strsIndex[] = [strlen($strs), strlen($entry['msgstr'])];
-            $strs .= $entry['msgstr'] . "\0";
-        }
-
-        $keysOffset = $strsOffset + 8 * $count;
-        $valsOffset = $keysOffset + strlen($ids);
-
-        $mo = pack('Iiiiiii', $magic, $revision, $count, $idsOffset, $strsOffset, 0, 0);
-
-        foreach ($idsIndex as $index) {
-            $mo .= pack('ii', $index[1], $keysOffset + $index[0]);
-        }
-
-        foreach ($strsIndex as $index) {
-            $mo .= pack('ii', $index[1], $valsOffset + $index[0]);
-        }
-
-        $mo .= $ids . $strs;
-
-        return $mo;
-    }
-
-    /**
-     * Convert PO file to .l10n.php file
-     *
-     * @param string $poFile Path to PO file
-     * @param string $phpFile Path to output .l10n.php file
-     * @param string $baseName Base filename
-     * @return bool True on success
-     */
-    private function convertPoToL10nPhp($poFile, $phpFile, $baseName)
-    {
-        $entries = [];
-        $currentEntry = null;
-        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if (empty($line) || $line[0] === '#') {
-                continue;
-            }
-
-            if (strpos($line, 'msgid') === 0) {
-                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-                    $entries[] = $currentEntry;
-                }
-                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
-            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
-                $currentEntry['msgstr'] = $this->extractString($line);
-            } elseif ($line[0] === '"' && $currentEntry !== null) {
-                $continuationText = $this->extractString($line);
-                if ($currentEntry['msgstr'] !== '') {
-                    $currentEntry['msgstr'] .= $continuationText;
-                } else if ($currentEntry['msgid'] !== '') {
-                    $currentEntry['msgid'] .= $continuationText;
-                }
-            }
-        }
-
-        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-            $entries[] = $currentEntry;
-        }
-
-        // Extract domain from filename
-        $domain = preg_replace('/-[a-z_]+$/i', '', $baseName);
-
-        // Build the l10n.php array structure
-        $localeData = ['messages' => []];
-        
-        // Add empty header entry
-        $localeData['messages'][''] = [
-            0 => '',
-            1 => '',
-        ];
-
-        // Add all translation entries
-        foreach ($entries as $entry) {
-            $localeData['messages'][$entry['msgid']] = [
-                0 => $entry['msgid'],
-                1 => $entry['msgstr'],
-            ];
-        }
-
-        // Build the final PHP array
-        $exported = var_export([
-            'domain' => $domain,
-            'locale_data' => $localeData,
-        ], true);
-        $minified = preg_replace('/\s+/', ' ', $exported);
-        $phpContent = "<?php\nreturn " . $minified . ";";
-
-        $written = file_put_contents($phpFile, $phpContent) !== false;
-        if ($written) {
-            chmod($phpFile, 0644);
-        }
-
-        return $written;
-    }
-
-    /**
-     * Convert PO file to .json file
-     *
-     * @param string $poFile Path to PO file
-     * @param string $jsonFile Path to output .json file
-     * @param string $baseName Base filename
-     * @return bool True on success
-     */
-    private function convertPoToJson($poFile, $jsonFile, $baseName)
-    {
-        $entries = [];
-        $currentEntry = null;
-        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if (empty($line) || $line[0] === '#') {
-                continue;
-            }
-
-            if (strpos($line, 'msgid') === 0) {
-                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-                    $entries[] = $currentEntry;
-                }
-                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
-            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
-                $currentEntry['msgstr'] = $this->extractString($line);
-            } elseif ($line[0] === '"' && $currentEntry !== null) {
-                $continuationText = $this->extractString($line);
-                if ($currentEntry['msgstr'] !== '') {
-                    $currentEntry['msgstr'] .= $continuationText;
-                } else if ($currentEntry['msgid'] !== '') {
-                    $currentEntry['msgid'] .= $continuationText;
-                }
-            }
-        }
-
-        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-            $entries[] = $currentEntry;
-        }
-
-        // Extract domain from filename
-        $domain = preg_replace('/-[a-z_]+$/i', '', $baseName);
-
-        // Build the JSON structure
-        $jsonData = [
-            'translation-revision-date' => date('Y-m-d H:i:s+0000'),
-            'generator' => 'PublishPress Translation Tool',
-            'source' => 'wp-content/plugins/' . $this->getPluginSlug(),
-            'domain' => $domain,
-            'locale_data' => [
-                'messages' => [
-                    '' => [
-                        'domain' => $domain,
-                        'lang' => str_replace('_', '-', substr($baseName, strpos($baseName, '-') + 1)),
-                    ],
-                ],
-            ],
-        ];
-
-        // Add all translation entries
-        foreach ($entries as $entry) {
-            $jsonData['locale_data']['messages'][$entry['msgid']] = [
-                $entry['msgid'],
-                $entry['msgstr'],
-            ];
-        }
-
-        // Write JSON file
-        $jsonContent = json_encode($jsonData, JSON_UNESCAPED_UNICODE);
-        $written = file_put_contents($jsonFile, $jsonContent) !== false;
-        if ($written) {
-            chmod($jsonFile, 0644);
-        }
-
-        return $written;
     }
 
     /**
@@ -2048,10 +1723,6 @@ class Translator
                         $this->revertPluginNameTranslations($poFile);
                         
                         $this->markIdenticalTranslationsAsFuzzy($poFile);
-
-                        $baseName = basename($poFile, '.po');
-                        $moFile = $this->languagesDir . '/' . $baseName . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
