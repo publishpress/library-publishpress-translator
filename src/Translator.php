@@ -1799,7 +1799,7 @@ class Translator
             'locale_data' => $localeData,
         ], true);
         $minified = preg_replace('/\s+/', ' ', $exported);
-        $phpContent = "<?php\nreturn " . $minified . ";\n";
+        $phpContent = "<?php\nreturn " . $minified . ";";
 
         $written = file_put_contents($phpFile, $phpContent) !== false;
         if ($written) {
@@ -1879,7 +1879,7 @@ class Translator
         }
 
         // Write JSON file
-        $jsonContent = json_encode($jsonData, JSON_UNESCAPED_UNICODE) . "\n";
+        $jsonContent = json_encode($jsonData, JSON_UNESCAPED_UNICODE);
         $written = file_put_contents($jsonFile, $jsonContent) !== false;
         if ($written) {
             chmod($jsonFile, 0644);
