@@ -122,7 +122,7 @@ Options:
   --upload               Upload existing translations to Weblate (no AI translation)
   --repair-plurals       Repair malformed plural entries in existing .po files
   --clean-po             Clean duplicate entries from all .po files
-  --sync-files           Ensure .po, .mo, .json, .l10n.php files are synchronized
+  --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
   --help                 Show this help message
 
 Examples:
@@ -134,7 +134,7 @@ Examples:
   publishpress-translate --upload                  # Upload existing translations to Weblate
   publishpress-translate --repair-plurals          # Fix malformed plural entries in .po files
   publishpress-translate --clean-po                # Remove duplicate entries from .po files
-  publishpress-translate --sync-files              # Synchronize all translation files
+  publishpress-translate --sync-files              # Check if translated files are up-to-date
 
 Environment Variables:
   OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
@@ -149,7 +149,7 @@ Workflow:
 Maintenance:
   - Clean duplicates:        publishpress-translate --clean-po
   - Fix plural formats:      publishpress-translate --repair-plurals
-  - Sync .po/.mo files:      publishpress-translate --sync-files
+  - Check compilation status:   publishpress-translate --sync-files
 
 HELP;
     exit(0);

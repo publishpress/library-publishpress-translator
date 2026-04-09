@@ -276,7 +276,7 @@ vendor/bin/publishpress-translate --repair-plurals
 # Clean duplicate entries from all .po files
 vendor/bin/publishpress-translate --clean-po
 
-# Synchronize .po, .mo, .l10n.php and .json files (ensure .mo, .l10n.php and .json are up to date)
+# Verify .po files are present (external tools compile to .mo, .json, .l10n.php)
 vendor/bin/publishpress-translate --sync-files
 ```
 
@@ -291,9 +291,7 @@ vendor/bin/publishpress-translate --repair-plurals
 
 **What this fixes:**
 - Detects plural entries where `msgstr[0]` contains pipe-delimited forms
-- Splits them into proper separate `msgstr[N]` lines 
-- Regenerates corresponding `.mo` files
-- Reports which files were repaired
+- Splits them into proper separate `msgstr[N]` lines
 
 **Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
 
@@ -311,7 +309,6 @@ vendor/bin/publishpress-translate --clean-po
 **What this does:**
 - Scans all `.po` files for duplicate extracted comments (`#.` lines)
 - Removes redundant comment lines within each entry
-- Regenerates corresponding `.mo` files for modified files
 - Reports which files were cleaned
 
 **When to use:**
@@ -322,30 +319,34 @@ vendor/bin/publishpress-translate --clean-po
 
 **Important:** This command only processes `.po` files and doesn't interact with Weblate or run AI translation.
 
-#### 6. Synchronize .po and Generated Translation Files
+#### 6. Check Translation File Status
 
-Ensure your `.mo`, `.json`, and `.l10n.php` files are in sync with `.po` source files:
+Check whether `.po` source files and compiled formats (`.mo`, `.json`, `.l10n.php`) are in sync:
 
 ```bash
-# Check and regenerate .mo, .l10n.php and .json files if missing or outdated
+# Check status of all translation files
 vendor/bin/publishpress-translate --sync-files
 ```
 
 **What this does:**
-- **Automatically regenerates** `.mo` files if missing or older than `.po`
-- **Automatically regenerates** `.json` files if existing and outdated
-- **Automatically regenerates** `.l10n.php` files if existing and outdated
-- **Detects** orphaned files (without corresponding `.po` source)
+- **Lists** all `.po` source files found
+- **Checks** if corresponding `.mo`, `.json`, and `.l10n.php` files exist
+- **Reports** whether compiled files are up-to-date or outdated compared to `.po` files
+- **Recommends** running compile step if any files are missing or outdated
 
 **When to use:**
-- Before deploying your plugin to ensure WordPress has the latest translations
-- After manually editing or updated `.po` files
-- To clean up orphaned translation files
+- Before deploying to ensure all translation formats are current
+- In CI/CD pipelines as a verification step
+- After updating `.po` files to see what needs recompilation
 
-**File Format Support:**
-- **`.mo`** (compiled binary) - Automatically regenerated if missing or outdated
-- **`.json`** (JSON translation format) - Automatically regenerated if existing and outdated
-- **`.l10n.php`** (PHP translation format) - Automatically regenerated if existing and outdated
+**Compiling Translation Files:**
+
+Compile `.mo`, `.json`, and `.l10n.php` files from `.po` sources using:
+- **`.mo`** (compiled binary) - `wp i18n make-mo` (WP-CLI) or `composer translate:compile`
+- **`.json`** (JSON format) - `composer translate:compile` or custom build script
+- **`.l10n.php`** (PHP format) - `composer translate:compile` or custom build script
+
+The library verifies compilation status but delegates actual compilation to your build/deployment tools.
 
 ### Default Languages
 
