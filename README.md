@@ -184,17 +184,17 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
-- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
+- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR`)
   Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
   These languages are typically handled by human translators on Weblate.
   The default skipped languages are merged with any custom ones you specify.
 
   ```bash
-  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR
+  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR
   ```
 
 ```.env file
-SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR,de_DE
+SKIP_LANGUAGES=it_IT,es_ES,fr_FR,de_DE
 ```
 
 ### Complete Translation Workflow
@@ -392,7 +392,6 @@ The following languages should not be translated by Potomatic, they are handled 
 - Italian (it_IT)
 - Spanish (es_ES)
 - French (fr_FR)
-- Brazilian Portuguese (pt_BR)
  
 These languages will be skipped during translation and upload processes, even if PO files exist for them.
 

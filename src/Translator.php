@@ -35,7 +35,6 @@ class Translator
         'it_IT',
         'es_ES',
         'fr_FR',
-        'pt_BR',
     ];
 
     /**
@@ -59,6 +58,7 @@ class Translator
         'fa_IR',
         'cs_CZ',
         'pt_PT',
+        'pt_BR',
         'zh_CN',
         'sv_SE',
         'hu_HU',
