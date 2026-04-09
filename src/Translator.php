@@ -688,6 +688,18 @@ class Translator
     }
 
     /**
+     * Validate (and auto-repair) malformed plural entries before uploading to Weblate.
+     *
+     * Repairs pipe-delimited plural forms so that Weblate receives clean PO files.
+     *
+     * @param string $poFile Path to PO file
+     */
+    private function validatePluralEntries($poFile)
+    {
+        $this->poCatalogProcessor->repairPipeDelimitedPlurals($poFile);
+    }
+
+    /**
      * Find all POT files
      *
      * @return array
