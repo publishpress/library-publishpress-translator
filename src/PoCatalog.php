@@ -8,7 +8,9 @@
 
 namespace PublishPress\Translations;
 
+use Gettext\Extractors\Po as PoExtractorV4;
 use Gettext\Generator\PoGenerator;
+use Gettext\Generators\Po as PoGeneratorV4;
 use Gettext\Loader\PoLoader;
 use Gettext\Translation;
 use Gettext\Translations;
@@ -61,8 +63,13 @@ class PoCatalog
             return null;
         }
 
-        $loader = new PoLoader();
-        $translations = $loader->loadString($content);
+        if (class_exists(PoLoader::class)) {
+            $loader = new PoLoader();
+            $translations = $loader->loadString($content);
+        } else {
+            $translations = new Translations();
+            PoExtractorV4::fromString($content, $translations);
+        }
 
         return new self($translations, $path, $content);
     }
@@ -100,8 +107,12 @@ class PoCatalog
      */
     public function saveIfChanged()
     {
-        $generator = new PoGenerator();
-        $newContent = $generator->generateString($this->translations);
+        if (class_exists(PoGenerator::class)) {
+            $generator = new PoGenerator();
+            $newContent = $generator->generateString($this->translations);
+        } else {
+            $newContent = PoGeneratorV4::toString($this->translations);
+        }
 
         if ($newContent === $this->originalContent) {
             return false;
