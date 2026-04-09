@@ -32,3 +32,5 @@ node_modules
 wordpress-version-notices.code-workspace
 .env
 dev-workspace/.cache
+
+.phpunit.result.cache

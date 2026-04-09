@@ -115,6 +115,13 @@ class Translator
     private $weblateClient = null;
 
     /**
+     * PO AST processor.
+     *
+     * @var PoCatalogProcessor
+     */
+    private $poCatalogProcessor;
+
+    /**
      * Default Potomatic AI settings
      */
     private const DEFAULT_AI_MODEL = 'gpt-4o-mini';
@@ -146,6 +153,7 @@ class Translator
     {
         $this->pluginRoot = rtrim($pluginRoot, '/\\');
         $this->languagesDir = $this->pluginRoot . '/languages';
+        $this->poCatalogProcessor = new PoCatalogProcessor();
 
         if (!is_dir($this->languagesDir)) {
             throw new Exception("Languages directory not found: {$this->languagesDir}");
@@ -217,7 +225,7 @@ class Translator
      *
      * Scans every .po file in the languages directory for plural entries where
      * msgstr[0] contains pipe-delimited forms and splits them into proper
-     * separate msgstr[N] lines. Also regenerates the corresponding .mo files.
+     * separate msgstr[N] lines.
      *
      * @return bool
      */
@@ -238,18 +246,9 @@ class Translator
 
         $repaired = 0;
         foreach ($poFiles as $poFile) {
-            $before = file_get_contents($poFile);
-            $this->repairPluralPipeDelimitedEntries($poFile);
-            $after = file_get_contents($poFile);
-
-            if ($before !== $after) {
+            if ($this->poCatalogProcessor->repairPipeDelimitedPlurals($poFile)) {
                 $baseName = basename($poFile);
                 echo "  ✓ Repaired: {$baseName}\n";
-
-                // Regenerate .mo file
-                $moFile = substr($poFile, 0, -3) . '.mo';
-                $this->convertPoToMo($poFile, $moFile);
-
                 $repaired++;
             }
         }
@@ -503,38 +502,7 @@ class Translator
      */
     private function deduplicatePoFile($poFile)
     {
-        $content = @file_get_contents($poFile);
-        if ($content === false || $content === '') {
-            return;
-        }
-
-        $lines = explode("\n", $content);
-        $result = [];
-        $seenMsgids = [];
-        $i = 0;
-
-        while ($i < count($lines)) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
-                $msgid = $msgidMatch[1];
-
-                if (isset($seenMsgids[$msgid])) {
-                    $i++;
-                    while ($i < count($lines) && !preg_match('/^msgid\s+/', $lines[$i])) {
-                        $i++;
-                    }
-                    continue;
-                }
-
-                $seenMsgids[$msgid] = true;
-            }
-
-            $result[] = $line;
-            $i++;
-        }
-
-        file_put_contents($poFile, implode("\n", $result));
+        $this->poCatalogProcessor->canonicalize($poFile);
     }
 
     /**
@@ -546,43 +514,7 @@ class Translator
     private function revertPluginNameTranslations($poFile)
     {
         $pluginName = $this->getPluginNameForExclusion();
-        if (!$pluginName) {
-            return;
-        }
-
-        $content = @file_get_contents($poFile);
-        if ($content === false || $content === '') {
-            return;
-        }
-
-        $lines = explode("\n", $content);
-        $result = [];
-        $i = 0;
-
-        while ($i < count($lines)) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
-                $msgid = $msgidMatch[1];
-
-                if ($msgid === $pluginName && $i + 1 < count($lines)) {
-                    $nextLine = $lines[$i + 1];
-
-                    if (preg_match('/^msgstr\s+"(.*)"$/', $nextLine)) {
-                        $result[] = $line;
-
-                        $result[] = 'msgstr "' . $msgid . '"';
-                        $i += 2;
-                        continue;
-                    }
-                }
-            }
-
-            $result[] = $line;
-            $i++;
-        }
-
-        file_put_contents($poFile, implode("\n", $result));
+        $this->poCatalogProcessor->enforcePluginNameUntranslated($poFile, $pluginName);
     }
 
     /**
@@ -592,92 +524,7 @@ class Translator
      */
     private function repairPluralPipeDelimitedEntries($poFile)
     {
-        $content = @file_get_contents($poFile);
-        if ($content === false || $content === '') {
-            return;
-        }
-
-        $lines = explode("\n", $content);
-        $result = [];
-        $count = count($lines);
-        $modified = false;
-
-        for ($i = 0; $i < $count; $i++) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid_plural\s+"(.*)"$/', $line)) {
-                $result[] = $line;
-                $i++;
-
-                $msgstrEntries = [];
-                $msgstrRawLines = [];
-
-                while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
-                    $idx = (int)$m[1];
-                    $value = $m[2];
-                    $rawLines = [$lines[$i]];
-                    $i++;
-
-                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
-                        $value .= $cont[1];
-                        $rawLines[] = $lines[$i];
-                        $i++;
-                    }
-
-                    $msgstrEntries[$idx] = $value;
-                    $msgstrRawLines[$idx] = $rawLines;
-                }
-
-                if (
-                    isset($msgstrEntries[0])
-                    && strpos($msgstrEntries[0], '|') !== false
-                    && $this->allPluralFormsEmptyExcept($msgstrEntries, 0)
-                ) {
-                    $forms = array_map('trim', explode('|', $msgstrEntries[0]));
-                    $nplurals = max(count($msgstrEntries), count($forms));
-
-                    for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
-                        $result[] = 'msgstr[' . $formIdx . '] "' . ($forms[$formIdx] ?? '') . '"';
-                    }
-                    $modified = true;
-                } else {
-                    foreach ($msgstrRawLines as $rawLines) {
-                        foreach ($rawLines as $rawLine) {
-                            $result[] = $rawLine;
-                        }
-                    }
-                }
-
-                $i--;
-                continue;
-            }
-
-            $result[] = $line;
-        }
-
-        if ($modified) {
-            file_put_contents($poFile, implode("\n", $result));
-        }
-    }
-
-    /**
-     * Check if all plural forms except the given index are empty
-     *
-     * @param array $msgstrLines Associative array of index => value
-     * @param int   $exceptIndex Index to skip
-     * @return bool
-     */
-    private function allPluralFormsEmptyExcept(array $msgstrLines, int $exceptIndex)
-    {
-        foreach ($msgstrLines as $idx => $val) {
-            if ($idx === $exceptIndex) {
-                continue;
-            }
-            if ($val !== '') {
-                return false;
-            }
-        }
-        return true;
+        $this->poCatalogProcessor->repairPipeDelimitedPlurals($poFile);
     }
 
     /**
@@ -1186,9 +1033,6 @@ class Translator
                 foreach (glob($this->languagesDir . "/{$textDomain}-*.po") as $existingPo) {
                     @unlink($existingPo);
                 }
-                foreach (glob($this->languagesDir . "/{$textDomain}-*.mo") as $existingMo) {
-                    @unlink($existingMo);
-                }
             }
 
             // Check if component exists
@@ -1242,12 +1086,10 @@ class Translator
                         file_put_contents($poFile, $poContent);
                         chmod($poFile, 0644);
 
-                        $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
-                        
-                        $this->revertPluginNameTranslations($poFile);
-                        
-                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
+                        $this->poCatalogProcessor->normalizeDownloadedFile(
+                            $poFile,
+                            $this->getPluginNameForExclusion()
+                        );
 
                         if (!$silent) {
                             echo "  ✓ {$language}\n";
@@ -1285,7 +1127,6 @@ class Translator
         $preferBase = getenv('WEBLATE_PREFER_BASE_LANGUAGE') === 'true' || getenv('WEBLATE_PREFER_BASE_LANGUAGE') === '1';
 
         $allPo = glob($this->languagesDir . "/{$textDomain}-*.po") ?: [];
-        $allMo = glob($this->languagesDir . "/{$textDomain}-*.mo") ?: [];
 
         $byLocale = [];
         foreach ($allPo as $poPath) {
@@ -1296,16 +1137,6 @@ class Translator
 
             $locale = $m[1];
             $byLocale[$locale]['po'] = $poPath;
-        }
-
-        foreach ($allMo as $moPath) {
-            $baseName = basename($moPath);
-            if (!preg_match('/^' . preg_quote($textDomain, '/') . '-(.+)\\.mo$/', $baseName, $m)) {
-                continue;
-            }
-
-            $locale = $m[1];
-            $byLocale[$locale]['mo'] = $moPath;
         }
 
         $localesByBase = [];
@@ -1344,182 +1175,11 @@ class Translator
             if (isset($byLocale[$locale]['po'])) {
                 @unlink($byLocale[$locale]['po']);
             }
-            if (isset($byLocale[$locale]['mo'])) {
-                @unlink($byLocale[$locale]['mo']);
-            }
 
             if (!$silent) {
                 echo "    ⊘ Removed duplicate {$locale}\n";
             }
         }
-    }
-
-    /**
-     * Convert PO file to MO file
-     *
-     * @param string $poFile Path to PO file
-     * @param string $moFile Path to output MO file
-     * @return bool True on success
-     */
-    private function convertPoToMo($poFile, $moFile)
-    {
-        $entries = [];
-        $currentEntry = null;
-        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if (empty($line) || $line[0] === '#') {
-                continue;
-            }
-
-            if (strpos($line, 'msgid') === 0) {
-                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-                    $entries[] = $currentEntry;
-                }
-                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
-            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
-                $currentEntry['msgstr'] = $this->extractString($line);
-            }
-        }
-
-        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-            $entries[] = $currentEntry;
-        }
-
-        $mo = $this->buildMoFile($entries);
-        $written = file_put_contents($moFile, $mo) !== false;
-        if ($written) {
-            chmod($moFile, 0644);
-        }
-
-        return $written;
-    }
-
-    /**
-     * Extract string from PO line
-     *
-     * @param string $line
-     * @return string
-     */
-    private function extractString($line)
-    {
-        if (preg_match('/"(.*)"/', $line, $matches)) {
-            return stripcslashes($matches[1]);
-        }
-        return '';
-    }
-
-    /**
-     * Build MO file content
-     *
-     * @param array $entries
-     * @return string
-     */
-    private function buildMoFile($entries)
-    {
-        $magic = 0x950412de;
-        $revision = 0;
-        $count = count($entries);
-
-        $idsOffset = 28;
-        $strsOffset = $idsOffset + 8 * $count;
-
-        $ids = '';
-        $strs = '';
-        $idsIndex = [];
-        $strsIndex = [];
-
-        foreach ($entries as $entry) {
-            $idsIndex[] = [strlen($ids), strlen($entry['msgid'])];
-            $ids .= $entry['msgid'] . "\0";
-
-            $strsIndex[] = [strlen($strs), strlen($entry['msgstr'])];
-            $strs .= $entry['msgstr'] . "\0";
-        }
-
-        $keysOffset = $strsOffset + 8 * $count;
-        $valsOffset = $keysOffset + strlen($ids);
-
-        $mo = pack('Iiiiiii', $magic, $revision, $count, $idsOffset, $strsOffset, 0, 0);
-
-        foreach ($idsIndex as $index) {
-            $mo .= pack('ii', $index[1], $keysOffset + $index[0]);
-        }
-
-        foreach ($strsIndex as $index) {
-            $mo .= pack('ii', $index[1], $valsOffset + $index[0]);
-        }
-
-        $mo .= $ids . $strs;
-
-        return $mo;
-    }
-
-    /**
-     * Mark identical translations as fuzzy in PO file
-     *
-     * @param string $poFile
-     */
-    private function markIdenticalTranslationsAsFuzzy($poFile)
-    {
-        $content = @file_get_contents($poFile);
-        if ($content === false) {
-            fwrite(STDERR, "Warning: Failed to read file: {$poFile}\n");
-            return;
-        }
-        if ($content === '') {
-            fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
-            return;
-        }
-
-        $lines  = explode("\n", $content);
-        $result = [];
-
-        for ($i = 0; $i < count($lines); $i++) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
-                $msgid = $msgidMatch[1];
-
-                if ($msgid === '') {
-                    $result[] = $line;
-                    continue;
-                }
-
-                // Only handle simple one-line msgstr directly after msgid
-                if (
-                    $i + 1 < count($lines)
-                    && preg_match('/^msgstr\s+"(.+)"$/', $lines[$i + 1], $msgstrMatch)
-                ) {
-                    $msgstr = $msgstrMatch[1];
-
-                    if ($msgid === $msgstr && $msgid !== '') {
-                        $commentIndex = count($result) - 1;
-                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
-                            $commentIndex--;
-                        }
-
-                        if ($commentIndex >= 0) {
-                            if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
-                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
-                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
-                                } else {
-                                    $result[$commentIndex] .= ', fuzzy';
-                                }
-                            }
-                        } else {
-                            $result[] = '#, fuzzy';
-                        }
-                    }
-                }
-            }
-
-            $result[] = $line;
-        }
-
-        file_put_contents($poFile, implode("\n", $result));
     }
 
     /**
@@ -1598,19 +1258,10 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
-                        if ($this->weblateClient) {
-                            $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
-                        }
-
-                        $this->repairPluralPipeDelimitedEntries($poFile);
-                        
-                        $this->revertPluginNameTranslations($poFile);
-                        
-                        $this->markIdenticalTranslationsAsFuzzy($poFile);
-
-                        $baseName = basename($poFile, '.po');
-                        $moFile = $this->languagesDir . '/' . $baseName . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
+                        $this->poCatalogProcessor->normalizeAfterTranslation(
+                            $poFile,
+                            $this->getPluginNameForExclusion()
+                        );
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";

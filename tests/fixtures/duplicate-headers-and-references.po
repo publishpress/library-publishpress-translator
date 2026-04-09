@@ -1,0 +1,16 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: First Header\n"
+"Language: pl_PL\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid ""
+msgstr ""
+"Project-Id-Version: Second Header\n"
+"Language: pl_PL\n"
+"Plural-Forms: nplurals=3; plural=(n != 1);\n"
+
+#: fake.php:10
+#: fake.php:10
+msgid "Settings"
+msgstr "Ustawienia"

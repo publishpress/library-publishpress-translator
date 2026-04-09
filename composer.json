@@ -12,7 +12,8 @@
     "require": {
         "php": ">=7.2.5",
         "ext-json": "*",
-        "guzzlehttp/guzzle": "^7.0"
+        "guzzlehttp/guzzle": "^7.0",
+        "gettext/gettext": "^5.7"
     },
     "config": {
         "process-timeout": 3600,
@@ -56,6 +57,7 @@
         "check:php-8.2": "phpcs --standard=.phpcs-php-compatibility.xml --runtime-set testVersion 8.2",
         "check:php-8.3": "phpcs --standard=.phpcs-php-compatibility.xml --runtime-set testVersion 8.3",
         "check:php-8.4": "phpcs --standard=.phpcs-php-compatibility.xml --runtime-set testVersion 8.4",
+        "test": "phpunit",
         "check:lint": "phplint --no-cache",
         "check:cs": "phpcs",
         "check:stan": "phpstan",

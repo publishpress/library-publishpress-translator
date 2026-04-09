@@ -1,0 +1,20 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Fake Plugin 1.0.0\n"
+"Language: pl_PL\n"
+"Plural-Forms: nplurals=3; plural=(n != 1);\n"
+
+#: fake.php:1
+msgid "Fake Plugin"
+msgstr "Falszywy Plugin"
+
+#: fake.php:2
+msgid "Settings"
+msgstr "Settings"
+
+#: fake.php:3
+msgid "%d item"
+msgid_plural "%d items"
+msgstr[0] "element|elementy|elementow"
+msgstr[1] ""
+msgstr[2] ""

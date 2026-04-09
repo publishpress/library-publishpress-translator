@@ -280,7 +280,6 @@ vendor/bin/publishpress-translate --repair-plurals
 **What this fixes:**
 - Detects plural entries where `msgstr[0]` contains pipe-delimited forms
 - Splits them into proper separate `msgstr[N]` lines 
-- Regenerates corresponding `.mo` files
 - Reports which files were repaired
 
 **Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
@@ -364,7 +363,7 @@ The translation tool will then automatically keep the plugin name untranslated i
 - Scans your plugin's `languages/` directory for `.pot` files
 - Generates AI translations for new/missing strings only
 - Merges with existing translations (preserves manual edits)
-- Creates/updates `.po` and `.mo` files for each target language
+- Creates/updates `.po` files for each target language
 
 **Step 3: Upload to Weblate**
 - Creates project on Weblate (using plugin slug as project slug)
@@ -377,8 +376,7 @@ The translation tool will then automatically keep the plugin name untranslated i
 1. Connects to Weblate using your API token
 2. Finds your plugin's project and components
 3. Downloads latest `.po` files for all languages
-4. Converts to `.mo` files for WordPress
-5. Saves to your `languages/` folder
+4. Saves normalized `.po` files to your `languages/` folder
 
 **Use this when:**
 - You want to sync translations before building
