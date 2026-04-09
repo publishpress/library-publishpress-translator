@@ -659,6 +659,58 @@ class WeblateClient
     }
 
     /**
+     * Remove duplicate extracted comment (#.) lines from PO file
+     * Each msgid in a .po file should only have one extracted comment per unique comment text.
+     *
+     * @param string $poFilePath
+     * @return void
+     */
+    public function removeDuplicateExtractedComments($poFilePath)
+    {
+        $content = @file_get_contents($poFilePath);
+        if ($content === false || $content === '') {
+            return;
+        }
+        
+        $lines = explode("\n", $content);
+        $result = [];
+        $seenInEntry = [];
+        $modified = false;
+        
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            $trimmed = trim($line);
+            
+            // Check if this is an extracted comment line
+            if (preg_match('/^#\.\s*(.*)$/', $trimmed, $matches)) {
+                $commentText = $matches[1];
+                
+                // If we've already seen this exact comment in the current entry, 
+                // skip adding this duplicate to the result
+                if (isset($seenInEntry[$commentText])) {
+                    $modified = true;
+                    continue;
+                }
+                
+                // First occurrence of this comment - mark it and add it
+                $seenInEntry[$commentText] = true;
+                $result[] = $line;
+            } else {
+                if (empty($trimmed)) {
+                    $seenInEntry = [];
+                }
+                
+                $result[] = $line;
+            }
+        }
+        
+        $cleanedContent = implode("\n", $result);
+        if ($modified) {
+            file_put_contents($poFilePath, $cleanedContent);
+        }
+    }
+
+    /**
      * Remove fuzzy flag from PO file header
      *
      * @param string $poFilePath
