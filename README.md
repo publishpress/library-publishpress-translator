@@ -297,6 +297,8 @@ vendor/bin/publishpress-translate --repair-plurals
 
 **Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
 
+**Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
+
 #### 5. Clean Duplicate Entries
 
 Remove duplicate extracted comments from all `.po` files:
