@@ -26,25 +26,23 @@ class PoCatalogProcessor
             return false;
         }
 
-        $translations = $catalog->getTranslations();
-
         // Header fuzzy must not be present in upload payloads.
-        $translations->getFlags()->delete('fuzzy');
+        $catalog->deleteFileFlag('fuzzy');
 
         $expectedPluralForms = $this->getWeblatePluralForms($languageCode);
         if ($expectedPluralForms) {
             $normalizedLanguage = str_replace('-', '_', $languageCode);
-            $translations->getHeaders()->set('Language', $normalizedLanguage);
+            $catalog->setHeader('Language', $normalizedLanguage);
 
             if ($languageCode === 'ja') {
-                $translations->getHeaders()->delete('Plural-Forms');
+                $catalog->deleteHeader('Plural-Forms');
             } else {
-                $translations->getHeaders()->set('Plural-Forms', $expectedPluralForms);
+                $catalog->setHeader('Plural-Forms', $expectedPluralForms);
             }
 
             $nplurals = $this->extractNplurals($expectedPluralForms);
             foreach ($catalog->getEntries() as $entry) {
-                if (!$entry instanceof Translation || $entry->getPlural() === null) {
+                if (!$entry instanceof Translation || !PoCatalog::entryHasPlural($entry)) {
                     continue;
                 }
 
@@ -58,8 +56,8 @@ class PoCatalogProcessor
                     $normalizedValues[] = $allValues[$i] ?? '';
                 }
 
-                $entry->translate($normalizedValues[0] ?? '');
-                $entry->translatePlural(...array_slice($normalizedValues, 1));
+                PoCatalog::setEntryTranslation($entry, $normalizedValues[0] ?? '');
+                PoCatalog::setEntryPluralTranslations($entry, array_slice($normalizedValues, 1));
             }
         }
 
@@ -93,8 +91,8 @@ class PoCatalogProcessor
 
         if ($pluginName) {
             $entry = $catalog->findEntry(null, $pluginName);
-            if ($entry instanceof Translation && $entry->getPlural() === null && $entry->getTranslation() !== $pluginName) {
-                $entry->translate($pluginName);
+            if ($entry instanceof Translation && !PoCatalog::entryHasPlural($entry) && $entry->getTranslation() !== $pluginName) {
+                PoCatalog::setEntryTranslation($entry, $pluginName);
                 $changed = true;
             }
         }
@@ -233,7 +231,7 @@ class PoCatalogProcessor
      */
     private function repairPipeDelimitedPluralEntry(Translation $entry)
     {
-        if ($entry->getPlural() === null) {
+        if (!PoCatalog::entryHasPlural($entry)) {
             return false;
         }
 
@@ -260,8 +258,8 @@ class PoCatalogProcessor
             $normalizedValues[] = $forms[$i] ?? '';
         }
 
-        $entry->translate($normalizedValues[0] ?? '');
-        $entry->translatePlural(...array_slice($normalizedValues, 1));
+        PoCatalog::setEntryTranslation($entry, $normalizedValues[0] ?? '');
+        PoCatalog::setEntryPluralTranslations($entry, array_slice($normalizedValues, 1));
 
         return true;
     }
@@ -276,7 +274,7 @@ class PoCatalogProcessor
             return false;
         }
 
-        if ($entry->getPlural() !== null) {
+        if (PoCatalog::entryHasPlural($entry)) {
             return false;
         }
 
@@ -287,11 +285,11 @@ class PoCatalogProcessor
             return false;
         }
 
-        if ($entry->getFlags()->has('fuzzy')) {
+        if (PoCatalog::entryHasFlag($entry, 'fuzzy')) {
             return false;
         }
 
-        $entry->getFlags()->add('fuzzy');
+        PoCatalog::addEntryFlag($entry, 'fuzzy');
 
         return true;
     }
@@ -304,11 +302,11 @@ class PoCatalogProcessor
     private function enforcePluginNameTranslation(PoCatalog $catalog, $pluginName)
     {
         $entry = $catalog->findEntry(null, $pluginName);
-        if (!$entry instanceof Translation || $entry->getPlural() !== null || $entry->getTranslation() === $pluginName) {
+        if (!$entry instanceof Translation || PoCatalog::entryHasPlural($entry) || $entry->getTranslation() === $pluginName) {
             return false;
         }
 
-        $entry->translate($pluginName);
+        PoCatalog::setEntryTranslation($entry, $pluginName);
 
         return true;
     }
