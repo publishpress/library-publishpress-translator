@@ -35,7 +35,6 @@ class Translator
         'it_IT',
         'es_ES',
         'fr_FR',
-        'pt_BR',
     ];
 
     /**
@@ -59,6 +58,7 @@ class Translator
         'fa_IR',
         'cs_CZ',
         'pt_PT',
+        'pt_BR',
         'zh_CN',
         'sv_SE',
         'hu_HU',
@@ -265,6 +265,159 @@ class Translator
     }
 
     /**
+     * Clean duplicate entries from all PO files
+     *
+     * @return bool
+     */
+    public function cleanPoFiles()
+    {
+        echo "\n✨ Cleaning duplicate entries from .po files\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po');
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+
+        if (!$this->weblateClient) {
+            fwrite(STDERR, "Warning: Weblate client not initialized.\n");
+            fwrite(STDERR, "Some cleanup operations may be limited.\n\n");
+        }
+
+        $cleaned = 0;
+        $cleanedWith = [];
+
+        foreach ($poFiles as $poFile) {
+            $baseName = basename($poFile);
+            $before = file_get_contents($poFile);
+
+            if ($this->weblateClient) {
+                $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                $this->weblateClient->removeDuplicateReferences($poFile);
+                $this->weblateClient->removeDuplicateExtractedComments($poFile);
+            }
+
+            $after = file_get_contents($poFile);
+
+            if ($before !== $after) {
+                $cleaned++;
+                echo "  ✓ Cleaned: {$baseName}\n";
+            } else {
+                echo "  ⊘ Clean: {$baseName}\n";
+            }
+        }
+
+        echo "\n" . str_repeat('=', 50) . "\n";
+
+        if ($cleaned > 0) {
+            echo "✨ Cleaned {$cleaned} file(s) with duplicate entries.\n\n";
+        } else {
+            echo "✨ All .po files are already clean — no duplicates found.\n\n";
+        }
+
+        return true;
+    }
+
+    /**
+     * Check .po files and compiled format status (.mo, .json, .l10n.php)
+     * This method reports status but doesn't regenerate compiled formats.
+     *
+     * @return bool
+     */
+    public function syncPoAndMoFiles()
+    {
+        echo "\n🔄 Checking translation file status\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po') ?: [];
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s):\n\n";
+
+        $missingCompiled = [];
+
+        foreach ($poFiles as $poFile) {
+            $baseName = basename($poFile, '.po');
+            $poMtime = filemtime($poFile);
+
+            echo "  📄 {$baseName}.po\n";
+
+            // Check .mo file
+            $moFile = $this->languagesDir . '/' . $baseName . '.mo';
+            if (!file_exists($moFile)) {
+                echo "     ⊘ .mo (missing)\n";
+                $missingCompiled[] = $baseName . '.mo';
+            } else {
+                $moMtime = filemtime($moFile);
+                if ($poMtime > $moMtime) {
+                    echo "     ⚠ .mo (outdated)\n";
+                    $missingCompiled[] = $baseName . '.mo';
+                } else {
+                    echo "     ✓ .mo (up-to-date)\n";
+                }
+            }
+
+            // Check .json file
+            $jsonFile = $this->languagesDir . '/' . $baseName . '.json';
+            if (!file_exists($jsonFile)) {
+                echo "     ⊘ .json (missing)\n";
+                $missingCompiled[] = $baseName . '.json';
+            } else {
+                $jsonMtime = filemtime($jsonFile);
+                if ($poMtime > $jsonMtime) {
+                    echo "     ⚠ .json (outdated)\n";
+                    $missingCompiled[] = $baseName . '.json';
+                } else {
+                    echo "     ✓ .json (up-to-date)\n";
+                }
+            }
+
+            // Check .l10n.php file
+            $phpFile = $this->languagesDir . '/' . $baseName . '.l10n.php';
+            if (!file_exists($phpFile)) {
+                echo "     ⊘ .l10n.php (missing)\n";
+                $missingCompiled[] = $baseName . '.l10n.php';
+            } else {
+                $phpMtime = filemtime($phpFile);
+                if ($poMtime > $phpMtime) {
+                    echo "     ⚠ .l10n.php (outdated)\n";
+                    $missingCompiled[] = $baseName . '.l10n.php';
+                } else {
+                    echo "     ✓ .l10n.php (up-to-date)\n";
+                }
+            }
+
+            echo "\n";
+        }
+
+        echo str_repeat('=', 50) . "\n";
+
+        if (!empty($missingCompiled)) {
+            echo "\n⚠️  Found " . count($missingCompiled) . " file(s) that need compilation:\n";
+            foreach ($missingCompiled as $file) {
+                echo "  - {$file}\n";
+            }
+            echo "\nRun 'composer translate:compile' to compile these files from their .po sources.\n";
+        } else {
+            echo "\n✨ All translation files are up-to-date.\n";
+        }
+
+        echo "\n";
+
+        return true;
+    }
+
+    /**
      * Reverse-map Weblate language codes to WordPress locale codes
      *
      * @param string $weblateCode
@@ -289,7 +442,10 @@ class Translator
 
         $lang = strtolower($code);
 
-        if (is_dir($this->languagesDir)) {
+        // Only search for existing regional variants if languages weren't explicitly set.
+        // When custom target languages are specified, respect them as-is to avoid creating
+        // unintended regional variants
+        if (!$this->customTargetLanguages && is_dir($this->languagesDir)) {
             $files = glob($this->languagesDir . "/*-{$lang}_*.po");
             if ($files) {
                 if (preg_match('/-(' . preg_quote($lang, '/') . '_[A-Z]{2,})\.po$/', $files[0], $m)) {
@@ -518,7 +674,11 @@ class Translator
     }
 
     /**
-     * Repair plural entries where msgstr[0] contains pipe-delimited forms.
+     * Repair plural entries where msgstr entries contain pipe-delimited forms.
+     * 
+     * Handles cases where the AI generated malformed plurals like:
+     * msgstr[0] "singular|plural"
+     * msgstr[1] "plural|plural"
      *
      * @param string $poFile Path to PO file
      */
@@ -563,15 +723,15 @@ class Translator
         $possiblePaths = [];
 
         if ($isDevWorkspace) {
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
         } else {
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
         }
 
         // Always check library's own potomatic (for development)
-        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic';
+        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic.js';
 
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
@@ -778,6 +938,9 @@ class Translator
             $languageCode = $matches[1];
 
             echo "    → Preparing {$languageCode}\n";
+
+            // Validate no malformed plural entries before uploading
+            $this->validatePluralEntries($poFile);
 
             $uploaded = false;
             $maxRetries = 3;
@@ -1183,6 +1346,71 @@ class Translator
     }
 
     /**
+     * Mark identical translations as fuzzy in PO file
+     *
+     * @param string $poFile
+     */
+    private function markIdenticalTranslationsAsFuzzy($poFile)
+    {
+        $content = @file_get_contents($poFile);
+        if ($content === false) {
+            fwrite(STDERR, "Warning: Failed to read file: {$poFile}\n");
+            return;
+        }
+        if ($content === '') {
+            fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
+            return;
+        }
+
+        $lines  = explode("\n", $content);
+        $result = [];
+
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch)) {
+                $msgid = $msgidMatch[1];
+
+                if ($msgid === '') {
+                    $result[] = $line;
+                    continue;
+                }
+
+                // Only handle simple one-line msgstr directly after msgid
+                if (
+                    $i + 1 < count($lines)
+                    && preg_match('/^msgstr\s+"(.+)"$/', $lines[$i + 1], $msgstrMatch)
+                ) {
+                    $msgstr = $msgstrMatch[1];
+
+                    if ($msgid === $msgstr && $msgid !== '') {
+                        $commentIndex = count($result) - 1;
+                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
+                            $commentIndex--;
+                        }
+
+                        if ($commentIndex >= 0) {
+                            if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
+                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
+                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
+                                } else {
+                                    $result[$commentIndex] .= ', fuzzy';
+                                }
+                            }
+                        } else {
+                            $result[] = '#, fuzzy';
+                        }
+                    }
+                }
+            }
+
+            $result[] = $line;
+        }
+
+        file_put_contents($poFile, implode("\n", $result));
+    }
+
+    /**
      * Execute translation
      *
      * @return bool
@@ -1196,6 +1424,11 @@ class Translator
         echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
+        
+        if (!empty($this->skippedLanguages)) {
+            echo "Skipped: " . implode(', ', $this->skippedLanguages) . " (handled by human translators)\n";
+        }
+        
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
 

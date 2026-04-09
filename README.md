@@ -43,7 +43,9 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         "translate:custom": "vendor/bin/publishpress-translate --languages",
         "translate:force": "vendor/bin/publishpress-translate --force",
         "translate:force-custom": "vendor/bin/publishpress-translate --force --languages",
-        "translate:repair-plurals": "php vendor/bin/publishpress-translate --repair-plurals",
+        "translate:repair-plurals": "vendor/bin/publishpress-translate --repair-plurals",
+        "translate:clean-po": "vendor/bin/publishpress-translate --clean-po",
+        "translate:sync-files": "vendor/bin/publishpress-translate --sync-files"
     }
 }
 ```
@@ -182,14 +184,18 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
-- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR,pt_BR`)
+- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR`)
   Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
   These languages are typically handled by human translators on Weblate.
   The default skipped languages are merged with any custom ones you specify.
 
   ```bash
-  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR,pt_BR
+  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR
   ```
+
+```.env file
+SKIP_LANGUAGES=it_IT,es_ES,fr_FR,de_DE
+```
 
 ### Complete Translation Workflow
 
@@ -266,6 +272,12 @@ vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 
 # Repair malformed plural entries in existing .po files
 vendor/bin/publishpress-translate --repair-plurals
+
+# Clean duplicate entries from all .po files
+vendor/bin/publishpress-translate --clean-po
+
+# Verify .po files are present (external tools compile to .mo, .json, .l10n.php)
+vendor/bin/publishpress-translate --sync-files
 ```
 
 #### 4. Repair Malformed Plural Entries
@@ -285,6 +297,57 @@ vendor/bin/publishpress-translate --repair-plurals
 **Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
+
+#### 5. Clean Duplicate Entries
+
+Remove duplicate extracted comments from all `.po` files:
+
+```bash
+# Clean duplicates from all .po files in the languages directory
+vendor/bin/publishpress-translate --clean-po
+```
+
+**What this does:**
+- Scans all `.po` files for duplicate extracted comments (`#.` lines)
+- Removes redundant comment lines within each entry
+- Reports which files were cleaned
+
+**When to use:**
+- After downloading from Weblate (if duplicates accumulated)
+- Before uploading to Weblate to keep files clean
+- As maintenance on skipped languages (which shouldn't be touched by AI translation)
+- Works independently of translation workflow
+
+**Important:** This command only processes `.po` files and doesn't interact with Weblate or run AI translation.
+
+#### 6. Check Translation File Status
+
+Check whether `.po` source files and compiled formats (`.mo`, `.json`, `.l10n.php`) are in sync:
+
+```bash
+# Check status of all translation files
+vendor/bin/publishpress-translate --sync-files
+```
+
+**What this does:**
+- **Lists** all `.po` source files found
+- **Checks** if corresponding `.mo`, `.json`, and `.l10n.php` files exist
+- **Reports** whether compiled files are up-to-date or outdated compared to `.po` files
+- **Recommends** running compile step if any files are missing or outdated
+
+**When to use:**
+- Before deploying to ensure all translation formats are current
+- In CI/CD pipelines as a verification step
+- After updating `.po` files to see what needs recompilation
+
+**Compiling Translation Files:**
+
+Compile `.mo`, `.json`, and `.l10n.php` files from `.po` sources using:
+- **`.mo`** (compiled binary) - `wp i18n make-mo` (WP-CLI) or `composer translate:compile`
+- **`.json`** (JSON format) - `composer translate:compile` or custom build script
+- **`.l10n.php`** (PHP format) - `composer translate:compile` or custom build script
+
+The library verifies compilation status but delegates actual compilation to your build/deployment tools.
 
 ### Default Languages
 
@@ -330,9 +393,15 @@ The following languages should not be translated by Potomatic, they are handled 
 - Italian (it_IT)
 - Spanish (es_ES)
 - French (fr_FR)
-- Brazilian Portuguese (pt_BR)
  
 These languages will be skipped during translation and upload processes, even if PO files exist for them.
+
+**How Skipped Languages Work:**
+
+1. **Translation (`composer translate`)** - Skipped languages are not passed to Potomatic AI translation
+2. **Upload (`composer translate:upload`)** - Skipped languages are NOT uploaded to Weblate
+3. **Download (`composer translate:download`)** - Skipped languages ARE downloaded from Weblate (translations can be pulled but not replaced by AI)
+4. **Cleaning/Syncing** - Skipped languages ARE operated on by `--clean-po` and `--sync-files` commands (useful for maintenance without risk of overwriting with AI)
 
 ### Preventing Plugin Name Translation
 

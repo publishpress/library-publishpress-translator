@@ -98,6 +98,8 @@ $options = getopt('', [
     'download',
     'upload',
     'repair-plurals',
+    'clean-po',
+    'sync-files',
     'help',
 ]);
 
@@ -119,6 +121,8 @@ Options:
   --download             Download translations from Weblate (instead of generating)
   --upload               Upload existing translations to Weblate (no AI translation)
   --repair-plurals       Repair malformed plural entries in existing .po files
+  --clean-po             Clean duplicate entries from all .po files
+  --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
   --help                 Show this help message
 
 Examples:
@@ -128,7 +132,9 @@ Examples:
   publishpress-translate --force                   # Force re-translate all
   publishpress-translate --download                # Download from Weblate
   publishpress-translate --upload                  # Upload existing translations to Weblate
-  publishpress-translate --repair-plurals           # Fix malformed plural entries in .po files
+  publishpress-translate --repair-plurals          # Fix malformed plural entries in .po files
+  publishpress-translate --clean-po                # Remove duplicate entries from .po files
+  publishpress-translate --sync-files              # Check if translated files are up-to-date
 
 Environment Variables:
   OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
@@ -139,6 +145,11 @@ Workflow:
   2. Review in Weblate:      https://weblate.publishpress.com/
   3. Download updates:       publishpress-translate --download
   4. Build plugin with translations in /languages folder
+
+Maintenance:
+  - Clean duplicates:        publishpress-translate --clean-po
+  - Fix plural formats:      publishpress-translate --repair-plurals
+  - Check compilation status:   publishpress-translate --sync-files
 
 HELP;
     exit(0);
@@ -163,6 +174,10 @@ try {
     // Check mode
     if (isset($options['repair-plurals'])) {
         $result = $translator->repairPluralEntries();
+    } elseif (isset($options['clean-po'])) {
+        $result = $translator->cleanPoFiles();
+    } elseif (isset($options['sync-files'])) {
+        $result = $translator->syncPoAndMoFiles();
     } elseif (isset($options['download'])) {
         $result = $translator->downloadFromWeblate();
     } elseif (isset($options['upload'])) {
