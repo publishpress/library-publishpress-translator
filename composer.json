@@ -13,7 +13,8 @@
         "php": ">=7.2.5",
         "ext-json": "*",
         "guzzlehttp/guzzle": "^7.0",
-        "gettext/gettext": "^5.7"
+        "gettext/gettext": "^4.8 || ^5.7"
+
     },
     "config": {
         "process-timeout": 3600,
