@@ -418,6 +418,72 @@ The translation tool will then automatically keep the plugin name untranslated i
 - Running AI translations with Potomatic
 - Downloading translations from Weblate
 
+### Translation Overrides and Exclusions
+
+You can control which words or phrases should be kept untranslated (excluded) or have specific translations enforced across all languages or per-language using environment variables.
+
+#### Global Overrides (All Languages)
+
+Set `TRANSLATION_OVERRIDES` to specify words that should be kept untranslated in all languages:
+
+```bash
+export TRANSLATION_OVERRIDES="Dashboard,Shortlinks,Upgrade to Pro"
+```
+
+Or in your `.env` file:
+```
+TRANSLATION_OVERRIDES="Dashboard,Shortlinks,Upgrade to Pro"
+```
+
+#### Per-Language Overrides
+
+Use `TRANSLATION_OVERRIDES_{language}` to override specific words for individual languages:
+
+```bash
+export TRANSLATION_OVERRIDES_yor="Shortlinks"
+
+export TRANSLATION_OVERRIDES_de_DE="Dashboard,Shortlinks"
+```
+
+Or in your `.env` file:
+```
+TRANSLATION_OVERRIDES_yor="Shortlinks,Upgrade to Pro"
+TRANSLATION_OVERRIDES_de_DE="Dashboard"
+```
+
+#### Custom Translations (Overrides)
+
+You can also force specific translations using the `source=target` format:
+
+```bash
+# Force "Pro" to be translated as "Premium" in all languages
+export TRANSLATION_OVERRIDES="Pro=Premium"
+
+# Language-specific custom translation
+export TRANSLATION_OVERRIDES_fr_FR="Upgrade to Pro=Passer à Premium"
+```
+
+#### How Overrides Work
+
+**Priority:** Language-specific overrides take precedence over global overrides.
+
+**Example:**
+```bash
+TRANSLATION_OVERRIDES="Dashboard,Shortlinks"
+TRANSLATION_OVERRIDES_yor="Upgrade to Pro"
+```
+
+- **Yoruba (yor):** "Dashboard", "Shortlinks", and "Upgrade to Pro" kept untranslated
+- **All other languages:** Only "Dashboard" and "Shortlinks" kept untranslated
+
+**Automatic Dictionary Integration:**
+
+The library includes a built-in dictionary (`config/dictionaries.json`) with common brand names and technical terms that are automatically kept untranslated:
+- PublishPress, TaxoPress, MetaSlider, WordPress, WooCommerce
+- Technical terms: taxonomy, taxonomies, post type, custom field, shortcode, widget, admin, dashboard
+
+These are applied automatically without needing to set them in `TRANSLATION_OVERRIDES`.
+
 ## How It Works
 
 ### Translation Cycle (`composer translate`)

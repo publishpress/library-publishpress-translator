@@ -137,8 +137,13 @@ Examples:
   publishpress-translate --sync-files              # Check if translated files are up-to-date
 
 Environment Variables:
-  OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
-  WEBLATE_API_TOKEN     Required for Weblate integration (upload/download)
+  OPENAI_API_KEY          Required for AI translations (not needed for --dry-run or --download)
+  WEBLATE_API_TOKEN       Required for Weblate integration (upload/download)
+  TRANSLATION_OVERRIDES       Comma-separated overrides/exclusions (all languages)
+                              Formats: "word" (exclude) or "word=Target" (custom form)
+                              Example: "Dashboard,post type=Post Type,lightbox"
+  TRANSLATION_OVERRIDES_{lang} Per-language overrides, e.g. TRANSLATION_OVERRIDES_yor
+                              Example: TRANSLATION_OVERRIDES_fr_FR="lightbox=boîte lumineuse"
 
 Workflow:
   1. Generate translations:  publishpress-translate
