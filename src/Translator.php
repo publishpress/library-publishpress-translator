@@ -137,6 +137,13 @@ class Translator
     ];
 
     /**
+     * Path to the temporary dictionary directory for translation overrides.
+     *
+     * @var string|null
+     */
+    private $tempDictionaryDir = null;
+
+    /**
      * Constructor
      *
      * @param string $pluginRoot Plugin root directory
@@ -737,6 +744,547 @@ class Translator
     }
 
     /**
+     * Load the default dictionaries from config/dictionaries.json.
+     *
+     * @return array Flattened dictionary
+     */
+    private function loadDictionaryDefaults()
+    {
+        $path = dirname(__DIR__) . '/config/dictionaries.json';
+
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if ($content === false) {
+            return [];
+        }
+
+        $data = json_decode($content, true);
+        if (!is_array($data)) {
+            return [];
+        }
+
+        $flat = [];
+        foreach ($data as $group => $entries) {
+            if (!is_array($entries)) {
+                continue;
+            }
+            foreach ($entries as $source => $target) {
+                if (is_string($source) && is_string($target) && trim($source) !== '') {
+                    $flat[$source] = $target;
+                }
+            }
+        }
+
+        return $flat;
+    }
+
+    /**
+     * Parse a TRANSLATION_OVERRIDES env var value into a flat override map.
+     *
+     * @param string $envValue Raw env var value
+     * @return array Override map
+     */
+    private function parseTranslationOverridesEnv($envValue)
+    {
+        $overrides = [];
+
+        if (!is_string($envValue) || trim($envValue) === '') {
+            return $overrides;
+        }
+
+        $entries = array_filter(array_map('trim', explode(',', $envValue)));
+
+        foreach ($entries as $entry) {
+            $equalsIndex = strpos($entry, '=');
+            if ($equalsIndex !== false && $equalsIndex > 0) {
+                $source = trim(substr($entry, 0, $equalsIndex));
+                $target = trim(substr($entry, $equalsIndex + 1));
+                if ($source !== '' && $target !== '') {
+                    $overrides[$source] = $target;
+                }
+            } else {
+                $word = trim($entry);
+                if ($word !== '') {
+                    $overrides[$word] = $word;
+                }
+            }
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * Build the translation overrides for all target languages.
+     *
+     * @return array Two keys
+     */
+    private function buildTranslationOverrides()
+    {
+        $global = $this->loadDictionaryDefaults();
+
+        $envGlobal = getenv('TRANSLATION_OVERRIDES');
+        if ($envGlobal !== false && trim($envGlobal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            foreach ($parsed as $source => $target) {
+                $global[$source] = $target;
+            }
+        }
+
+        $perLanguage = [];
+        foreach ($this->targetLanguages as $lang) {
+            $envKey = 'TRANSLATION_OVERRIDES_' . $lang;
+            $envVal = getenv($envKey);
+            if ($envVal !== false && trim($envVal) !== '') {
+                $perLanguage[$lang] = $this->parseTranslationOverridesEnv($envVal);
+            }
+        }
+
+        return [
+            'global' => $global,
+            'per_language' => $perLanguage,
+        ];
+    }
+
+    /**
+     * Create a temporary dictionary directory with JSON files that potomatic
+     * can consume via --use-dictionary --dictionary-path.
+     *
+     * @return string|null Path to the temp dictionary dir, or null if no overrides
+     */
+    private function createTempDictionaryDir()
+    {
+        $overrides = $this->buildTranslationOverrides();
+        $global = $overrides['global'];
+        $perLanguage = $overrides['per_language'];
+
+        if (empty($global) && empty($perLanguage)) {
+            return null;
+        }
+
+        $tmpDir = dirname(__DIR__) . '/translation-overrides-' . uniqid();
+        if (!mkdir($tmpDir, 0755, true)) {
+            fwrite(STDERR, "Warning: Could not create temporary dictionary directory for overrides: {$tmpDir}\n");
+            return null;
+        }
+
+        $this->tempDictionaryDir = $tmpDir;
+
+        $wordList = [];
+
+        if (!empty($global)) {
+            file_put_contents($tmpDir . '/dictionary.json', json_encode($global, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $wordList = array_merge($wordList, array_keys($global));
+        }
+
+        foreach ($perLanguage as $lang => $entries) {
+            if (empty($entries)) {
+                continue;
+            }
+            $merged = array_merge($global, $entries);
+            $langCode = strtolower(str_replace('_', '-', $lang));
+            file_put_contents($tmpDir . '/dictionary-' . $langCode . '.json', json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $wordList = array_merge($wordList, array_keys($entries));
+        }
+
+        $wordList = array_unique($wordList);
+        echo "📋 Created temporary translation-overrides directory to exclude/override the following words:\n";
+        echo "   " . implode(', ', $wordList) . "\n\n";
+
+        return $tmpDir;
+    }
+
+    /**
+     * Remove the temporary dictionary directory created for translation overrides.
+     */
+    private function cleanupTempDictionaryDir()
+    {
+        if ($this->tempDictionaryDir === null || !is_dir($this->tempDictionaryDir)) {
+            return;
+        }
+
+        $files = glob($this->tempDictionaryDir . '/*');
+        if ($files) {
+            foreach ($files as $file) {
+                @unlink($file);
+            }
+        }
+
+        @rmdir($this->tempDictionaryDir);
+        echo "🧹 Deleted temporary translation-overrides directory\n";
+        $this->tempDictionaryDir = null;
+    }
+
+    /**
+     * Get the overrides map for a specific language.
+     *
+     * Used for post-processing .po files to enforce overrides after AI translation.
+     *
+     * @param string $language Target language code
+     * @return array Override map
+     */
+    private function getOverridesForLanguage($language)
+    {
+        $overrides = [];
+
+        $envGlobal = getenv('TRANSLATION_OVERRIDES');
+        if ($envGlobal !== false && trim($envGlobal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            foreach ($parsed as $source => $target) {
+                $overrides[$source] = $target;
+            }
+        }
+
+        $envKey = 'TRANSLATION_OVERRIDES_' . $language;
+        $envVal = getenv($envKey);
+        if ($envVal !== false && trim($envVal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envVal);
+            foreach ($parsed as $source => $target) {
+                $overrides[$source] = $target;
+            }
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * Apply translation overrides to a PO file as post-processing.
+     *
+     * @param string $poFile   Path to PO file
+     * @param string $language Target language code
+     */
+    private function applyTranslationOverrides($poFile, $language)
+    {
+        $overrides = $this->getOverridesForLanguage($language);
+
+        if (empty($overrides)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $totalReplacements = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = $lines[$i];
+                    $i++;
+                }
+
+                if ($msgidValue === '') {
+                    foreach ($msgidLines as $ml) {
+                        $result[] = $ml;
+                    }
+                    continue;
+                }
+
+                $matchedOverrides = [];
+                foreach ($overrides as $source => $target) {
+                    if (strcasecmp($msgidValue, $source) === 0) {
+                        $matchedOverrides[$source] = ['target' => $target, 'exact' => true];
+                    } elseif (mb_stripos($msgidValue, $source) !== false) {
+                        $matchedOverrides[$source] = ['target' => $target, 'exact' => false];
+                    }
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if (empty($matchedOverrides)) {
+                    continue;
+                }
+
+                while ($i < $count && preg_match('/^msgid_plural\s+"(.*)"$/', $lines[$i])) {
+                    $result[] = $lines[$i];
+                    $i++;
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i])) {
+                        $result[] = $lines[$i];
+                        $i++;
+                    }
+                }
+
+                while ($i < $count && preg_match('/^(msgstr(?:\[\d+\])?)\s+"(.*)"$/', $lines[$i], $msgstrMatch)) {
+                    $prefix = $msgstrMatch[1];
+                    $msgstrValue = $msgstrMatch[2];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue === '') {
+                        $result[] = $prefix . ' ""';
+                        continue;
+                    }
+
+                    $modified = $msgstrValue;
+                    $wasModified = false;
+
+                    foreach ($matchedOverrides as $source => $info) {
+                        if ($info['exact']) {
+                            if ($modified !== $info['target']) {
+                                $modified = $info['target'];
+                                $wasModified = true;
+                            }
+                        } else {
+                            $escaped = preg_quote($source, '/');
+                            if (strpos($source, ' ') !== false) {
+                                $pattern = '/' . $escaped . '/iu';
+                            } else {
+                                $pattern = '/\b' . $escaped . '\b/iu';
+                            }
+                            $before = $modified;
+                            $modified = preg_replace($pattern, $info['target'], $modified);
+                            if ($modified !== $before) {
+                                $wasModified = true;
+                            }
+                        }
+                    }
+
+                    if ($wasModified) {
+                        $totalReplacements++;
+                    }
+
+                    $result[] = $prefix . ' "' . $modified . '"';
+                }
+
+                continue;
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        if ($totalReplacements > 0) {
+            file_put_contents($poFile, implode("\n", $result));
+        }
+    }
+
+    /**
+     * Get the path to the translation overrides manifest file.
+     *
+     * The manifest tracks which words were previously set by TRANSLATION_OVERRIDES
+     * env vars, so we can detect removed overrides and clear them for re-translation.
+     *
+     * @return string Path to manifest JSON file
+     */
+    private function getOverridesManifestPath()
+    {
+        return dirname(__DIR__) . '/.translation-overrides-manifest.json';
+    }
+
+    /**
+     * Load the previous overrides manifest.
+     *
+     * @return array Previous manifest
+     */
+    private function loadOverridesManifest()
+    {
+        $path = $this->getOverridesManifestPath();
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if ($content === false || $content === '') {
+            return [];
+        }
+
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Save the current overrides manifest.
+     *
+     * Records which words are currently being enforced by TRANSLATION_OVERRIDES
+     * env vars.
+     */
+    private function saveOverridesManifest()
+    {
+        $manifest = $this->loadOverridesManifest();
+
+        foreach ($this->targetLanguages as $lang) {
+            $overrides = $this->getOverridesForLanguage($lang);
+            if (!empty($overrides)) {
+                $manifest[$lang] = array_keys($overrides);
+            } else {
+                unset($manifest[$lang]);
+            }
+        }
+
+        $path = $this->getOverridesManifestPath();
+
+        if (empty($manifest)) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+            return;
+        }
+
+        @file_put_contents($path, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * Clear stale overrides from a PO file before running potomatic.
+     *
+     * @param string $poFile   Path to PO file
+     * @param string $language Target language code
+     */
+    private function clearStaleOverrides($poFile, $language)
+    {
+        $previousManifest = $this->loadOverridesManifest();
+
+        if (empty($previousManifest)) {
+            return;
+        }
+
+        $previousWords = [];
+        foreach ($previousManifest as $manifestLang => $words) {
+            if (strcasecmp($manifestLang, $language) === 0) {
+                $previousWords = $words;
+                break;
+            }
+        }
+
+        if (empty($previousWords)) {
+            return;
+        }
+
+        $currentOverrides = $this->getOverridesForLanguage($language);
+
+        $staleWords = [];
+        foreach ($previousWords as $word) {
+            $stillActive = false;
+            foreach ($currentOverrides as $source => $target) {
+                if (strcasecmp($word, $source) === 0) {
+                    $stillActive = true;
+                    break;
+                }
+            }
+            if (!$stillActive) {
+                $staleWords[] = $word;
+            }
+        }
+
+        if (empty($staleWords)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $totalCleared = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = rtrim($lines[$i], "\r");
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = rtrim($lines[$i], "\r");
+                    $i++;
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+
+                $isStale = false;
+                foreach ($staleWords as $staleWord) {
+                    if (strcasecmp($msgidValue, $staleWord) === 0) {
+                        $isStale = true;
+                        break;
+                    }
+                }
+
+                if ($isStale && $i < $count && preg_match('/^msgstr\s+"(.*)"$/', rtrim($lines[$i], "\r"), $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue === $msgidValue) {
+                        $result[] = 'msgstr ""';
+                        $totalCleared++;
+                        echo "    Clearing stale override '{$msgidValue}' for re-translation\n";
+                    } else {
+                        $result[] = 'msgstr "' . $msgstrValue . '"';
+                    }
+
+                    continue;
+                }
+
+                continue;
+            }
+
+            $result[] = rtrim($line, "\r");
+            $i++;
+        }
+
+        if ($totalCleared > 0) {
+            file_put_contents($poFile, implode("\n", $result));
+            echo "  Cleared {$totalCleared} stale override(s) in {$language} for re-translation\n";
+        }
+    }
+
+    /**
+     * Extract language code from a PO file path.
+     *
+     * @param string $poFile     Path to PO file
+     * @param string $textDomain Text domain prefix
+     * @return string|null Language code or null if not extractable
+     */
+    private function extractLanguageFromPoFile($poFile, $textDomain)
+    {
+        $baseName = basename($poFile, '.po');
+        $prefix = $textDomain . '-';
+
+        if (strpos($baseName, $prefix) === 0) {
+            return substr($baseName, strlen($prefix));
+        }
+
+        return null;
+    }
+
+    /**
      * Repair plural entries where msgstr entries contain pipe-delimited forms.
      * 
      * Handles cases where the AI generated malformed plurals like:
@@ -1019,6 +1567,11 @@ class Translator
         $apiKey = $this->getApiKey();
         if ($apiKey) {
             $cmd .= ' --api-key ' . escapeshellarg($apiKey);
+        }
+
+        if ($this->tempDictionaryDir !== null && is_dir($this->tempDictionaryDir)) {
+            $cmd .= ' --use-dictionary';
+            $cmd .= ' --dictionary-path ' . escapeshellarg($this->tempDictionaryDir);
         }
 
         return $cmd;
@@ -1458,6 +2011,8 @@ class Translator
                         
                         $this->revertPluginNameTranslations($poFile);
 
+                        $this->applyTranslationOverrides($poFile, $wpLocale);
+
                         if (!$silent) {
                             echo "  ✓ {$language}\n";
                         }
@@ -1567,8 +2122,9 @@ class Translator
      * Mark identical translations as fuzzy in PO file
      *
      * @param string $poFile
+     * @param string|null $language Target language code for override lookup
      */
-    private function markIdenticalTranslationsAsFuzzy($poFile)
+    private function markIdenticalTranslationsAsFuzzy($poFile, $language = null)
     {
         $content = @file_get_contents($poFile);
         if ($content === false) {
@@ -1578,6 +2134,33 @@ class Translator
         if ($content === '') {
             fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
             return;
+        }
+
+        // Build set of words that are intentionally kept as-is
+        $protectedWords = [];
+
+        // 1. Dictionary defaults
+        $dictDefaults = $this->loadDictionaryDefaults();
+        foreach ($dictDefaults as $source => $target) {
+            if (strcasecmp($source, $target) === 0) {
+                $protectedWords[strtolower($source)] = true;
+            }
+        }
+
+        // 2. Plugin name
+        $pluginName = $this->getPluginNameForExclusion();
+        if ($pluginName) {
+            $protectedWords[strtolower($pluginName)] = true;
+        }
+
+        // 3. Current env var overrides for this language
+        if ($language !== null) {
+            $envOverrides = $this->getOverridesForLanguage($language);
+            foreach ($envOverrides as $source => $target) {
+                if (strcasecmp($source, $target) === 0) {
+                    $protectedWords[strtolower($source)] = true;
+                }
+            }
         }
 
         $lines  = explode("\n", $content);
@@ -1602,21 +2185,23 @@ class Translator
                     $msgstr = $msgstrMatch[1];
 
                     if ($msgid === $msgstr && $msgid !== '') {
-                        $commentIndex = count($result) - 1;
-                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
-                            $commentIndex--;
-                        }
-
-                        if ($commentIndex >= 0) {
-                            if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
-                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
-                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
-                                } else {
-                                    $result[$commentIndex] .= ', fuzzy';
-                                }
+                        if (!isset($protectedWords[strtolower($msgid)])) {
+                            $commentIndex = count($result) - 1;
+                            while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
+                                $commentIndex--;
                             }
-                        } else {
-                            $result[] = '#, fuzzy';
+
+                            if ($commentIndex >= 0) {
+                                if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
+                                    if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
+                                        $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
+                                    } else {
+                                        $result[$commentIndex] .= ', fuzzy';
+                                    }
+                                }
+                            } else {
+                                $result[] = '#, fuzzy';
+                            }
                         }
                     }
                 }
@@ -1686,6 +2271,8 @@ class Translator
         echo "📝 Step 2: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
 
+        $this->createTempDictionaryDir();
+
         $success = true;
         foreach ($potFiles as $index => $potFile) {
             $potFileName = basename($potFile);
@@ -1693,6 +2280,14 @@ class Translator
 
             echo "[" . ($index + 1) . "/" . count($potFiles) . "] Processing: {$potFileName}\n";
             echo "Text domain: {$textDomain}\n";
+
+            $existingPoFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
+            foreach ($existingPoFiles as $existingPoFile) {
+                $poLang = $this->extractLanguageFromPoFile($existingPoFile, $textDomain);
+                if ($poLang) {
+                    $this->clearStaleOverrides($existingPoFile, $poLang);
+                }
+            }
 
             try {
                 $command = $this->buildCommand($potFile, $textDomain);
@@ -1721,8 +2316,13 @@ class Translator
                         $this->validatePluralEntries($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
+
+                        $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
+                        if ($poLanguage) {
+                            $this->applyTranslationOverrides($poFile, $poLanguage);
+                        }
                         
-                        $this->markIdenticalTranslationsAsFuzzy($poFile);
+                        $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
@@ -1751,6 +2351,10 @@ class Translator
                 }
             }
         }
+
+        $this->cleanupTempDictionaryDir();
+
+        $this->saveOverridesManifest();
 
         echo str_repeat('=', 50) . "\n";
         echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
