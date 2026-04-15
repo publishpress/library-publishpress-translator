@@ -1432,6 +1432,402 @@ class Translator
         return true;
     }
 
+
+    /**
+     * Get possible WordPress.org plugin slugs from composer.json extra field.
+     *
+     * Returns an array of slugs to try, in priority order.
+     *
+     * @return array Array of possible plugin slugs for wordpress.org
+     */
+    private function getWpOrgPluginSlugs()
+    {
+        $slugs = [];
+        $composerFile = $this->pluginRoot . '/composer.json';
+
+        if (file_exists($composerFile)) {
+            $composer = json_decode(file_get_contents($composerFile), true);
+
+            // Try plugin-slug first
+            if (isset($composer['extra']['plugin-slug'])) {
+                $slugs[] = $composer['extra']['plugin-slug'];
+            }
+
+            // Also try plugin-lang-domain as it might be the actual wp.org slug
+            if (isset($composer['extra']['plugin-lang-domain']) && 
+                !in_array($composer['extra']['plugin-lang-domain'], $slugs)) {
+                $slugs[] = $composer['extra']['plugin-lang-domain'];
+            }
+        }
+
+        return $slugs;
+    }
+
+    /**
+     * Get the plugin version from the main plugin file header.
+     *
+     * Scans PHP files in the plugin root for the standard WordPress "Version:" header.
+     *
+     * @return string|null Plugin version or null if not found
+     */
+    private function getPluginVersion()
+    {
+        $phpFiles = glob($this->pluginRoot . '/*.php');
+
+        foreach ($phpFiles as $phpFile) {
+            $content = @file_get_contents($phpFile, false, null, 0, 8192);
+            if ($content === false) {
+                continue;
+            }
+
+            if (preg_match('/^\s*\*?\s*Version:\s*(.+)$/mi', $content, $match)) {
+                return trim($match[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download translations from translate.wordpress.org for a given text domain.
+     *
+     * @param string $textDomain The plugin text domain
+     * @param bool   $silent     If true, suppress output messages
+     * @return int Number of languages downloaded
+     */
+    private function downloadFromWordPressOrg($textDomain, $silent = false)
+    {
+        $possibleSlugs = $this->getWpOrgPluginSlugs();
+        if (empty($possibleSlugs)) {
+            if (!$silent) {
+                fwrite(STDERR, "  Warning: Cannot determine wordpress.org plugin slug. Skipping wp.org download.\n");
+            }
+            return 0;
+        }
+
+        $pluginVersion = $this->getPluginVersion();
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 60,
+                'user_agent' => 'PublishPress-Translations/1.0',
+            ],
+        ]);
+
+        // Try each possible slug until we find translations
+        $data = null;
+        $wpOrgSlug = null;
+        
+        foreach ($possibleSlugs as $index => $slug) {
+            $apiUrl = 'https://api.wordpress.org/translations/plugins/1.0/';
+            $apiUrl .= '?slug=' . urlencode($slug);
+            if ($pluginVersion) {
+                $apiUrl .= '&version=' . urlencode($pluginVersion);
+            }
+
+            if (!$silent) {
+                if ($index === 0) {
+                    echo "  Fetching available translations from wordpress.org for '{$slug}'...\n";
+                } else {
+                    echo "  No translations found for previous slug, trying '{$slug}' (plugin-lang-domain)...\n";
+                }
+            }
+
+            $response = @file_get_contents($apiUrl, false, $context);
+            if ($response !== false) {
+                $decoded = json_decode($response, true);
+                if (is_array($decoded) && isset($decoded['translations']) && !empty($decoded['translations'])) {
+                    $data = $decoded;
+                    $wpOrgSlug = $slug;
+                    break;
+                }
+            }
+        }
+
+        if ($data === null) {
+            if (!$silent) {
+                echo "  No translations available on wordpress.org for any of: " . implode(', ', $possibleSlugs) . "\n";
+            }
+            return 0;
+        }
+
+        $availableTranslations = [];
+        foreach ($data['translations'] as $translation) {
+            if (isset($translation['language']) && isset($translation['package'])) {
+                $availableTranslations[$translation['language']] = $translation;
+            }
+        }
+
+        $allSupportedLanguages = array_unique(array_merge($this->targetLanguages, $this->skippedLanguages));
+
+        if (!$silent) {
+            echo "  Found " . count($availableTranslations) . " language(s) on wordpress.org\n";
+            echo "  Available wp.org languages: " . implode(', ', array_keys($availableTranslations)) . "\n";
+            echo "  Checking against all supported languages: " . implode(', ', $allSupportedLanguages) . "\n";
+        }
+
+        $downloaded = 0;
+        $tmpDir = sys_get_temp_dir() . '/pp-wporg-translations-' . uniqid();
+        @mkdir($tmpDir, 0755, true);
+
+        foreach ($allSupportedLanguages as $language) {
+            if (!isset($availableTranslations[$language])) {
+                if (!$silent) {
+                    echo "    Skipping {$language} (not available on wp.org)\n";
+                }
+                continue;
+            }
+
+            $packageUrl = $availableTranslations[$language]['package'];
+            if (empty($packageUrl)) {
+                continue;
+            }
+
+            $zipContent = @file_get_contents($packageUrl, false, $context);
+            if ($zipContent === false) {
+                if (!$silent) {
+                    fwrite(STDERR, "    Warning: Failed to download {$language} package from wordpress.org\n");
+                }
+                continue;
+            }
+
+            $zipFile = $tmpDir . '/' . $language . '.zip';
+            file_put_contents($zipFile, $zipContent);
+
+            $zip = new \ZipArchive();
+            if ($zip->open($zipFile) !== true) {
+                if (!$silent) {
+                    fwrite(STDERR, "    Warning: Failed to open zip for {$language}\n");
+                }
+                @unlink($zipFile);
+                continue;
+            }
+
+            $poExtracted = false;
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if (substr($entryName, -3) === '.po') {
+                    $poContent = $zip->getFromIndex($i);
+                    if ($poContent !== false) {
+                        $targetPoFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
+                        $merged = $this->mergeWpOrgTranslations($targetPoFile, $poContent, $language, $silent);
+                        $poExtracted = true;
+                        if ($merged) {
+                            $downloaded++;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            $zip->close();
+            @unlink($zipFile);
+
+            if (!$poExtracted && !$silent) {
+                echo "    No PO file found in {$language} package\n";
+            }
+        }
+
+        $tmpFiles = glob($tmpDir . '/*');
+        if ($tmpFiles) {
+            foreach ($tmpFiles as $f) {
+                @unlink($f);
+            }
+        }
+        @rmdir($tmpDir);
+
+        return $downloaded;
+    }
+
+    /**
+     * Merge translations from wordpress.org into an existing PO file.
+     *
+     * @param string $targetPoFile    Path to the target PO file
+     * @param string $wpOrgPoContent  Raw PO content downloaded from wordpress.org
+     * @param string $language        Language code
+     * @param bool   $silent          Suppress output
+     */
+    private function mergeWpOrgTranslations($targetPoFile, $wpOrgPoContent, $language, $silent = false)
+    {
+        $wpOrgMap = $this->parsePoContentToMap($wpOrgPoContent);
+
+        if (empty($wpOrgMap)) {
+            return '';
+        }
+
+        if (!file_exists($targetPoFile)) {
+            if (!$silent) {
+                echo "    Skipping {$language} (file doesn't exist locally)\n";
+            }
+            return false;
+        }
+
+        $existingContent = @file_get_contents($targetPoFile);
+        if ($existingContent === false || $existingContent === '') {
+            if (!$silent) {
+                echo "    Skipping {$language} (file is empty)\n";
+            }
+            return false;
+        }
+
+        $lines = explode("\n", $existingContent);
+        $result = [];
+        $overridden = 0;
+        $filled = 0;
+        $unchanged = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = $lines[$i];
+                    $i++;
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgid_plural\s+/', $lines[$i])) {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgstr\s+"(.*)"$/', $lines[$i], $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $msgstrLineIdx = $i;
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if (isset($wpOrgMap[$msgidValue]) && $wpOrgMap[$msgidValue] !== '') {
+                        $wpOrgTranslation = $wpOrgMap[$msgidValue];
+                        $result[] = 'msgstr "' . $wpOrgTranslation . '"';
+
+                        if ($msgstrValue === '') {
+                            $filled++;
+                        } elseif ($msgstrValue !== $wpOrgTranslation) {
+                            $overridden++;
+                        } else {
+                            $unchanged++;
+                        }
+                    } else {
+                        for ($j = $msgstrLineIdx; $j < $i; $j++) {
+                            $result[] = $lines[$j];
+                        }
+                    }
+
+                    continue;
+                }
+
+                continue;
+            }
+            $result[] = $line;
+            $i++;
+        }
+
+        if (count($wpOrgMap) > 0) {
+            file_put_contents($targetPoFile, implode("\n", $result));
+        }
+
+        if ($overridden === 0 && $filled === 0 && $unchanged === 0) {
+            if (!$silent) {
+                echo "    Checking {$language} (no matching strings found - different POT structure)\n";
+            }
+            return false;
+        }
+        
+        if (!$silent && (count($wpOrgMap) > 0)) {
+            $parts = [];
+            if ($filled > 0) {
+                $parts[] = "{$filled} updated from wp.org translations";
+            }
+            if ($overridden > 0) {
+                $parts[] = "{$overridden} corrected from wp.org translations";
+            }
+            if ($unchanged > 0) {
+                $parts[] = "{$unchanged} already in sync with wp.org translations";
+            }
+            if (!empty($parts)) {
+                echo "    Merged wp.org translations for {$language}\n      (" . implode(', ', $parts) . ")\n";
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Parse PO file content into a simple msgid to msgstr map.
+     *
+     * Only handles single-form (non-plural) entries.
+     *
+     * @param string $poContent Raw PO file content
+     * @return array Map of msgid to msgstr
+     */
+    private function parsePoContentToMap($poContent)
+    {
+        $map = [];
+        $lines = explode("\n", $poContent);
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = rtrim($lines[$i], "\r");
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                    $msgidValue .= $cont[1];
+                    $i++;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgid_plural\s+/', rtrim($lines[$i], "\r"))) {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgstr\s+"(.*)"$/', rtrim($lines[$i], "\r"), $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue !== '') {
+                        $map[$msgidValue] = $msgstrValue;
+                    }
+                }
+
+                continue;
+            }
+
+            $i++;
+        }
+
+        return $map;
+    }
+
+
     /**
      * Find all POT files
      *
@@ -2268,7 +2664,23 @@ class Translator
             return false;
         }
 
-        echo "📝 Step 2: Running AI translation with Potomatic...\n";
+        // Step 2: Download translations from translate.wordpress.org
+        if (!$this->dryRun) {
+            echo "📥 Step 2: Downloading translations from translate.wordpress.org...\n";
+            $totalWpOrgDownloaded = 0;
+            foreach ($potFiles as $potFile) {
+                $potFileName = basename($potFile);
+                $textDomain = str_replace('.pot', '', $potFileName);
+                $totalWpOrgDownloaded += $this->downloadFromWordPressOrg($textDomain);
+            }
+            if ($totalWpOrgDownloaded > 0) {
+                echo "✓ Merged translations from translate.wordpress.org for {$totalWpOrgDownloaded} language(s)\n\n";
+            } else {
+                echo "⊘ No translations found on wordpress.org\n\n";
+            }
+        }
+
+        echo "📝 Step 3: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
 
         $this->createTempDictionaryDir();
@@ -2337,9 +2749,9 @@ class Translator
             }
         }
 
-        // Step 3: Upload updated translations to Weblate (if enabled)
+        // Step 4: Upload updated translations to Weblate (if enabled)
         if ($this->weblateEnabled && !$this->dryRun && $success) {
-            echo "\n📤 Step 3: Uploading updated translations to Weblate...\n\n";
+            echo "\n📤 Step 4: Uploading updated translations to Weblate...\n\n";
             foreach ($potFiles as $potFile) {
                 $potFileName = basename($potFile);
                 $textDomain = str_replace('.pot', '', $potFileName);
