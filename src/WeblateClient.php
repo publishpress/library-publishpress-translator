@@ -424,9 +424,39 @@ class WeblateClient
                 );
             }
             
-            return json_decode($response->getBody()->getContents(), true);
+            $result = json_decode($response->getBody()->getContents(), true);
+            return $result;
         } catch (GuzzleException $e) {
-            throw new Exception("Error uploading POT file: " . $e->getMessage());
+            $errorMessage = "Error uploading POT file: " . $e->getMessage();
+            
+            // Try to extract detailed validation errors from response
+            if ($e->hasResponse()) {
+                $responseBody = $e->getResponse()->getBody()->getContents();
+                $errorData = json_decode($responseBody, true);
+                
+                if ($errorData && isset($errorData['detail'])) {
+                    $errorMessage .= "\nDetails: " . $errorData['detail'];
+                }
+                
+                if ($errorData && isset($errorData['errors'])) {
+                    $errorMessage .= "\nValidation errors:";
+                    foreach ($errorData['errors'] as $error) {
+                        if (isset($error['detail'])) {
+                            $errorMessage .= "\n  - " . $error['detail'];
+                        }
+                        if (isset($error['code'])) {
+                            $errorMessage .= " (code: " . $error['code'] . ")";
+                        }
+                    }
+                }
+                
+                // If we have the raw response but couldn't parse it, show it
+                if (!$errorData && $responseBody) {
+                    $errorMessage .= "\nRaw response: " . substr($responseBody, 0, 500);
+                }
+            }
+            
+            throw new Exception($errorMessage);
         }
     }
 
