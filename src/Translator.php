@@ -35,7 +35,6 @@ class Translator
         'it_IT',
         'es_ES',
         'fr_FR',
-        'pt_BR',
     ];
 
     /**
@@ -59,6 +58,7 @@ class Translator
         'fa_IR',
         'cs_CZ',
         'pt_PT',
+        'pt_BR',
         'zh_CN',
         'sv_SE',
         'hu_HU',
@@ -135,6 +135,13 @@ class Translator
         'max_cost' => self::DEFAULT_AI_MAX_COST,
         'verbose_level' => self::DEFAULT_AI_VERBOSE_LEVEL,
     ];
+
+    /**
+     * Path to the temporary dictionary directory for translation overrides.
+     *
+     * @var string|null
+     */
+    private $tempDictionaryDir = null;
 
     /**
      * Constructor
@@ -245,11 +252,6 @@ class Translator
             if ($before !== $after) {
                 $baseName = basename($poFile);
                 echo "  ✓ Repaired: {$baseName}\n";
-
-                // Regenerate .mo file
-                $moFile = substr($poFile, 0, -3) . '.mo';
-                $this->convertPoToMo($poFile, $moFile);
-
                 $repaired++;
             }
         }
@@ -261,6 +263,159 @@ class Translator
         } else {
             echo "✨ No malformed plural entries found — all files are clean.\n\n";
         }
+
+        return true;
+    }
+
+    /**
+     * Clean duplicate entries from all PO files
+     *
+     * @return bool
+     */
+    public function cleanPoFiles()
+    {
+        echo "\n✨ Cleaning duplicate entries from .po files\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po');
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+
+        if (!$this->weblateClient) {
+            fwrite(STDERR, "Warning: Weblate client not initialized.\n");
+            fwrite(STDERR, "Some cleanup operations may be limited.\n\n");
+        }
+
+        $cleaned = 0;
+        $cleanedWith = [];
+
+        foreach ($poFiles as $poFile) {
+            $baseName = basename($poFile);
+            $before = file_get_contents($poFile);
+
+            if ($this->weblateClient) {
+                $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                $this->weblateClient->removeDuplicateReferences($poFile);
+                $this->weblateClient->removeDuplicateExtractedComments($poFile);
+            }
+
+            $after = file_get_contents($poFile);
+
+            if ($before !== $after) {
+                $cleaned++;
+                echo "  ✓ Cleaned: {$baseName}\n";
+            } else {
+                echo "  ⊘ Clean: {$baseName}\n";
+            }
+        }
+
+        echo "\n" . str_repeat('=', 50) . "\n";
+
+        if ($cleaned > 0) {
+            echo "✨ Cleaned {$cleaned} file(s) with duplicate entries.\n\n";
+        } else {
+            echo "✨ All .po files are already clean — no duplicates found.\n\n";
+        }
+
+        return true;
+    }
+
+    /**
+     * Check .po files and compiled format status (.mo, .json, .l10n.php)
+     * This method reports status but doesn't regenerate compiled formats.
+     *
+     * @return bool
+     */
+    public function syncPoAndMoFiles()
+    {
+        echo "\n🔄 Checking translation file status\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Path: {$this->languagesDir}\n\n";
+
+        $poFiles = glob($this->languagesDir . '/*.po') ?: [];
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            return false;
+        }
+
+        echo "Found " . count($poFiles) . " .po file(s):\n\n";
+
+        $missingCompiled = [];
+
+        foreach ($poFiles as $poFile) {
+            $baseName = basename($poFile, '.po');
+            $poMtime = filemtime($poFile);
+
+            echo "  📄 {$baseName}.po\n";
+
+            // Check .mo file
+            $moFile = $this->languagesDir . '/' . $baseName . '.mo';
+            if (!file_exists($moFile)) {
+                echo "     ⊘ .mo (missing)\n";
+                $missingCompiled[] = $baseName . '.mo';
+            } else {
+                $moMtime = filemtime($moFile);
+                if ($poMtime > $moMtime) {
+                    echo "     ⚠ .mo (outdated)\n";
+                    $missingCompiled[] = $baseName . '.mo';
+                } else {
+                    echo "     ✓ .mo (up-to-date)\n";
+                }
+            }
+
+            // Check .json file
+            $jsonFile = $this->languagesDir . '/' . $baseName . '.json';
+            if (!file_exists($jsonFile)) {
+                echo "     ⊘ .json (missing)\n";
+                $missingCompiled[] = $baseName . '.json';
+            } else {
+                $jsonMtime = filemtime($jsonFile);
+                if ($poMtime > $jsonMtime) {
+                    echo "     ⚠ .json (outdated)\n";
+                    $missingCompiled[] = $baseName . '.json';
+                } else {
+                    echo "     ✓ .json (up-to-date)\n";
+                }
+            }
+
+            // Check .l10n.php file
+            $phpFile = $this->languagesDir . '/' . $baseName . '.l10n.php';
+            if (!file_exists($phpFile)) {
+                echo "     ⊘ .l10n.php (missing)\n";
+                $missingCompiled[] = $baseName . '.l10n.php';
+            } else {
+                $phpMtime = filemtime($phpFile);
+                if ($poMtime > $phpMtime) {
+                    echo "     ⚠ .l10n.php (outdated)\n";
+                    $missingCompiled[] = $baseName . '.l10n.php';
+                } else {
+                    echo "     ✓ .l10n.php (up-to-date)\n";
+                }
+            }
+
+            echo "\n";
+        }
+
+        echo str_repeat('=', 50) . "\n";
+
+        if (!empty($missingCompiled)) {
+            echo "\n⚠️  Found " . count($missingCompiled) . " file(s) that need compilation:\n";
+            foreach ($missingCompiled as $file) {
+                echo "  - {$file}\n";
+            }
+            echo "\nRun 'composer translate:compile' to compile these files from their .po sources.\n";
+        } else {
+            echo "\n✨ All translation files are up-to-date.\n";
+        }
+
+        echo "\n";
 
         return true;
     }
@@ -290,7 +445,10 @@ class Translator
 
         $lang = strtolower($code);
 
-        if (is_dir($this->languagesDir)) {
+        // Only search for existing regional variants if languages weren't explicitly set.
+        // When custom target languages are specified, respect them as-is to avoid creating
+        // unintended regional variants
+        if (!$this->customTargetLanguages && is_dir($this->languagesDir)) {
             $files = glob($this->languagesDir . "/*-{$lang}_*.po");
             if ($files) {
                 if (preg_match('/-(' . preg_quote($lang, '/') . '_[A-Z]{2,})\.po$/', $files[0], $m)) {
@@ -586,7 +744,552 @@ class Translator
     }
 
     /**
-     * Repair plural entries where msgstr[0] contains pipe-delimited forms.
+     * Load the default dictionaries from config/dictionaries.json.
+     *
+     * @return array Flattened dictionary
+     */
+    private function loadDictionaryDefaults()
+    {
+        $path = dirname(__DIR__) . '/config/dictionaries.json';
+
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if ($content === false) {
+            return [];
+        }
+
+        $data = json_decode($content, true);
+        if (!is_array($data)) {
+            return [];
+        }
+
+        $flat = [];
+        foreach ($data as $group => $entries) {
+            if (!is_array($entries)) {
+                continue;
+            }
+            foreach ($entries as $source => $target) {
+                if (is_string($source) && is_string($target) && trim($source) !== '') {
+                    $flat[$source] = $target;
+                }
+            }
+        }
+
+        return $flat;
+    }
+
+    /**
+     * Parse a TRANSLATION_OVERRIDES env var value into a flat override map.
+     *
+     * @param string $envValue Raw env var value
+     * @return array Override map
+     */
+    private function parseTranslationOverridesEnv($envValue)
+    {
+        $overrides = [];
+
+        if (!is_string($envValue) || trim($envValue) === '') {
+            return $overrides;
+        }
+
+        $entries = array_filter(array_map('trim', explode(',', $envValue)));
+
+        foreach ($entries as $entry) {
+            $equalsIndex = strpos($entry, '=');
+            if ($equalsIndex !== false && $equalsIndex > 0) {
+                $source = trim(substr($entry, 0, $equalsIndex));
+                $target = trim(substr($entry, $equalsIndex + 1));
+                if ($source !== '' && $target !== '') {
+                    $overrides[$source] = $target;
+                }
+            } else {
+                $word = trim($entry);
+                if ($word !== '') {
+                    $overrides[$word] = $word;
+                }
+            }
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * Build the translation overrides for all target languages.
+     *
+     * @return array Two keys
+     */
+    private function buildTranslationOverrides()
+    {
+        $global = $this->loadDictionaryDefaults();
+
+        $envGlobal = getenv('TRANSLATION_OVERRIDES');
+        if ($envGlobal !== false && trim($envGlobal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            foreach ($parsed as $source => $target) {
+                $global[$source] = $target;
+            }
+        }
+
+        $perLanguage = [];
+        foreach ($this->targetLanguages as $lang) {
+            $envKey = 'TRANSLATION_OVERRIDES_' . $lang;
+            $envVal = getenv($envKey);
+            if ($envVal !== false && trim($envVal) !== '') {
+                $perLanguage[$lang] = $this->parseTranslationOverridesEnv($envVal);
+            }
+        }
+
+        return [
+            'global' => $global,
+            'per_language' => $perLanguage,
+        ];
+    }
+
+    /**
+     * Create a temporary dictionary directory with JSON files that potomatic
+     * can consume via --use-dictionary --dictionary-path.
+     *
+     * @return string|null Path to the temp dictionary dir, or null if no overrides
+     */
+    private function createTempDictionaryDir()
+    {
+        $overrides = $this->buildTranslationOverrides();
+        $global = $overrides['global'];
+        $perLanguage = $overrides['per_language'];
+
+        if (empty($global) && empty($perLanguage)) {
+            return null;
+        }
+
+        $tmpDir = dirname(__DIR__) . '/translation-overrides-' . uniqid();
+        if (!mkdir($tmpDir, 0755, true)) {
+            fwrite(STDERR, "Warning: Could not create temporary dictionary directory for overrides: {$tmpDir}\n");
+            return null;
+        }
+
+        $this->tempDictionaryDir = $tmpDir;
+
+        $wordList = [];
+
+        if (!empty($global)) {
+            file_put_contents($tmpDir . '/dictionary.json', json_encode($global, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $wordList = array_merge($wordList, array_keys($global));
+        }
+
+        foreach ($perLanguage as $lang => $entries) {
+            if (empty($entries)) {
+                continue;
+            }
+            $merged = array_merge($global, $entries);
+            $langCode = strtolower(str_replace('_', '-', $lang));
+            file_put_contents($tmpDir . '/dictionary-' . $langCode . '.json', json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $wordList = array_merge($wordList, array_keys($entries));
+        }
+
+        $wordList = array_unique($wordList);
+        echo "📋 Created temporary translation-overrides directory to exclude/override the following words:\n";
+        echo "   " . implode(', ', $wordList) . "\n\n";
+
+        return $tmpDir;
+    }
+
+    /**
+     * Remove the temporary dictionary directory created for translation overrides.
+     */
+    private function cleanupTempDictionaryDir()
+    {
+        if ($this->tempDictionaryDir === null || !is_dir($this->tempDictionaryDir)) {
+            return;
+        }
+
+        $files = glob($this->tempDictionaryDir . '/*');
+        if ($files) {
+            foreach ($files as $file) {
+                @unlink($file);
+            }
+        }
+
+        @rmdir($this->tempDictionaryDir);
+        echo "🧹 Deleted temporary translation-overrides directory\n";
+        $this->tempDictionaryDir = null;
+    }
+
+    /**
+     * Get the overrides map for a specific language.
+     *
+     * Used for post-processing .po files to enforce overrides after AI translation.
+     *
+     * @param string $language Target language code
+     * @return array Override map
+     */
+    private function getOverridesForLanguage($language)
+    {
+        $overrides = [];
+
+        $envGlobal = getenv('TRANSLATION_OVERRIDES');
+        if ($envGlobal !== false && trim($envGlobal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            foreach ($parsed as $source => $target) {
+                $overrides[$source] = $target;
+            }
+        }
+
+        $envKey = 'TRANSLATION_OVERRIDES_' . $language;
+        $envVal = getenv($envKey);
+        if ($envVal !== false && trim($envVal) !== '') {
+            $parsed = $this->parseTranslationOverridesEnv($envVal);
+            foreach ($parsed as $source => $target) {
+                $overrides[$source] = $target;
+            }
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * Apply translation overrides to a PO file as post-processing.
+     *
+     * @param string $poFile   Path to PO file
+     * @param string $language Target language code
+     */
+    private function applyTranslationOverrides($poFile, $language)
+    {
+        $overrides = $this->getOverridesForLanguage($language);
+
+        if (empty($overrides)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $totalReplacements = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = $lines[$i];
+                    $i++;
+                }
+
+                if ($msgidValue === '') {
+                    foreach ($msgidLines as $ml) {
+                        $result[] = $ml;
+                    }
+                    continue;
+                }
+
+                $matchedOverrides = [];
+                foreach ($overrides as $source => $target) {
+                    if (strcasecmp($msgidValue, $source) === 0) {
+                        $matchedOverrides[$source] = ['target' => $target, 'exact' => true];
+                    } elseif (mb_stripos($msgidValue, $source) !== false) {
+                        $matchedOverrides[$source] = ['target' => $target, 'exact' => false];
+                    }
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if (empty($matchedOverrides)) {
+                    continue;
+                }
+
+                while ($i < $count && preg_match('/^msgid_plural\s+"(.*)"$/', $lines[$i])) {
+                    $result[] = $lines[$i];
+                    $i++;
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i])) {
+                        $result[] = $lines[$i];
+                        $i++;
+                    }
+                }
+
+                while ($i < $count && preg_match('/^(msgstr(?:\[\d+\])?)\s+"(.*)"$/', $lines[$i], $msgstrMatch)) {
+                    $prefix = $msgstrMatch[1];
+                    $msgstrValue = $msgstrMatch[2];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue === '') {
+                        $result[] = $prefix . ' ""';
+                        continue;
+                    }
+
+                    $modified = $msgstrValue;
+                    $wasModified = false;
+
+                    foreach ($matchedOverrides as $source => $info) {
+                        if ($info['exact']) {
+                            if ($modified !== $info['target']) {
+                                $modified = $info['target'];
+                                $wasModified = true;
+                            }
+                        } else {
+                            $escaped = preg_quote($source, '/');
+                            if (strpos($source, ' ') !== false) {
+                                $pattern = '/' . $escaped . '/iu';
+                            } else {
+                                $pattern = '/\b' . $escaped . '\b/iu';
+                            }
+                            $before = $modified;
+                            $modified = preg_replace($pattern, $info['target'], $modified);
+                            if ($modified !== $before) {
+                                $wasModified = true;
+                            }
+                        }
+                    }
+
+                    if ($wasModified) {
+                        $totalReplacements++;
+                    }
+
+                    $result[] = $prefix . ' "' . $modified . '"';
+                }
+
+                continue;
+            }
+
+            $result[] = $line;
+            $i++;
+        }
+
+        if ($totalReplacements > 0) {
+            file_put_contents($poFile, implode("\n", $result));
+        }
+    }
+
+    /**
+     * Get the path to the translation overrides manifest file.
+     *
+     * The manifest tracks which words were previously set by TRANSLATION_OVERRIDES
+     * env vars, so we can detect removed overrides and clear them for re-translation.
+     *
+     * @return string Path to manifest JSON file
+     */
+    private function getOverridesManifestPath()
+    {
+        return dirname(__DIR__) . '/.translation-overrides-manifest.json';
+    }
+
+    /**
+     * Load the previous overrides manifest.
+     *
+     * @return array Previous manifest
+     */
+    private function loadOverridesManifest()
+    {
+        $path = $this->getOverridesManifestPath();
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if ($content === false || $content === '') {
+            return [];
+        }
+
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Save the current overrides manifest.
+     *
+     * Records which words are currently being enforced by TRANSLATION_OVERRIDES
+     * env vars.
+     */
+    private function saveOverridesManifest()
+    {
+        $manifest = $this->loadOverridesManifest();
+
+        foreach ($this->targetLanguages as $lang) {
+            $overrides = $this->getOverridesForLanguage($lang);
+            if (!empty($overrides)) {
+                $manifest[$lang] = array_keys($overrides);
+            } else {
+                unset($manifest[$lang]);
+            }
+        }
+
+        $path = $this->getOverridesManifestPath();
+
+        if (empty($manifest)) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+            return;
+        }
+
+        @file_put_contents($path, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * Clear stale overrides from a PO file before running potomatic.
+     *
+     * @param string $poFile   Path to PO file
+     * @param string $language Target language code
+     */
+    private function clearStaleOverrides($poFile, $language)
+    {
+        $previousManifest = $this->loadOverridesManifest();
+
+        if (empty($previousManifest)) {
+            return;
+        }
+
+        $previousWords = [];
+        foreach ($previousManifest as $manifestLang => $words) {
+            if (strcasecmp($manifestLang, $language) === 0) {
+                $previousWords = $words;
+                break;
+            }
+        }
+
+        if (empty($previousWords)) {
+            return;
+        }
+
+        $currentOverrides = $this->getOverridesForLanguage($language);
+
+        $staleWords = [];
+        foreach ($previousWords as $word) {
+            $stillActive = false;
+            foreach ($currentOverrides as $source => $target) {
+                if (strcasecmp($word, $source) === 0) {
+                    $stillActive = true;
+                    break;
+                }
+            }
+            if (!$stillActive) {
+                $staleWords[] = $word;
+            }
+        }
+
+        if (empty($staleWords)) {
+            return;
+        }
+
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return;
+        }
+
+        $lines = explode("\n", $content);
+        $result = [];
+        $totalCleared = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = rtrim($lines[$i], "\r");
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = rtrim($lines[$i], "\r");
+                    $i++;
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+
+                $isStale = false;
+                foreach ($staleWords as $staleWord) {
+                    if (strcasecmp($msgidValue, $staleWord) === 0) {
+                        $isStale = true;
+                        break;
+                    }
+                }
+
+                if ($isStale && $i < $count && preg_match('/^msgstr\s+"(.*)"$/', rtrim($lines[$i], "\r"), $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue === $msgidValue) {
+                        $result[] = 'msgstr ""';
+                        $totalCleared++;
+                        echo "    Clearing stale override '{$msgidValue}' for re-translation\n";
+                    } else {
+                        $result[] = 'msgstr "' . $msgstrValue . '"';
+                    }
+
+                    continue;
+                }
+
+                continue;
+            }
+
+            $result[] = rtrim($line, "\r");
+            $i++;
+        }
+
+        if ($totalCleared > 0) {
+            file_put_contents($poFile, implode("\n", $result));
+            echo "  Cleared {$totalCleared} stale override(s) in {$language} for re-translation\n";
+        }
+    }
+
+    /**
+     * Extract language code from a PO file path.
+     *
+     * @param string $poFile     Path to PO file
+     * @param string $textDomain Text domain prefix
+     * @return string|null Language code or null if not extractable
+     */
+    private function extractLanguageFromPoFile($poFile, $textDomain)
+    {
+        $baseName = basename($poFile, '.po');
+        $prefix = $textDomain . '-';
+
+        if (strpos($baseName, $prefix) === 0) {
+            return substr($baseName, strlen($prefix));
+        }
+
+        return null;
+    }
+
+    /**
+     * Repair plural entries where msgstr entries contain pipe-delimited forms.
+     * 
+     * Handles cases where the AI generated malformed plurals like:
+     * msgstr[0] "singular|plural"
+     * msgstr[1] "plural|plural"
      *
      * @param string $poFile Path to PO file
      */
@@ -603,7 +1306,8 @@ class Translator
         $modified = false;
 
         for ($i = 0; $i < $count; $i++) {
-            $line = $lines[$i];
+            // Remove carriage returns to handle both Unix (LF) and Windows (CRLF) line endings
+            $line = rtrim($lines[$i], "\r");
 
             if (preg_match('/^msgid_plural\s+"(.*)"$/', $line)) {
                 $result[] = $line;
@@ -612,15 +1316,23 @@ class Translator
                 $msgstrEntries = [];
                 $msgstrRawLines = [];
 
-                while ($i < $count && preg_match('/^msgstr\[(\d+)\]\s+"(.*)"$/', $lines[$i], $m)) {
+                // Collect all msgstr[n] entries, handling multiline strings properly
+                while ($i < $count && preg_match('/^msgstr\[(\d+)\]/', rtrim($lines[$i], "\r"), $m)) {
                     $idx = (int)$m[1];
-                    $value = $m[2];
-                    $rawLines = [$lines[$i]];
+                    $rawLineOriginal = rtrim($lines[$i], "\r");
+                    $rawLines = [$rawLineOriginal];
                     $i++;
 
-                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    // Extract the initial value on the msgstr[n] line
+                    if (preg_match('/^msgstr\[\d+\]\s+"(.*)"$/', $rawLineOriginal, $match)) {
+                        $value = $match[1];
+                    } else {
+                        $value = '';
+                    }
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
                         $value .= $cont[1];
-                        $rawLines[] = $lines[$i];
+                        $rawLines[] = rtrim($lines[$i], "\r");
                         $i++;
                     }
 
@@ -628,16 +1340,30 @@ class Translator
                     $msgstrRawLines[$idx] = $rawLines;
                 }
 
-                if (
-                    isset($msgstrEntries[0])
-                    && strpos($msgstrEntries[0], '|') !== false
-                    && $this->allPluralFormsEmptyExcept($msgstrEntries, 0)
-                ) {
-                    $forms = array_map('trim', explode('|', $msgstrEntries[0]));
+                // Check if ANY msgstr entry contains pipe-delimited forms
+                $hasPipedEntry = false;
+                $sourcePipeEntry = null;
+                
+                foreach ($msgstrEntries as $idx => $value) {
+                    if (strpos($value, '|') !== false) {
+                        $hasPipedEntry = true;
+                        // Use the first piped entry as the source for splitting
+                        if ($sourcePipeEntry === null) {
+                            $sourcePipeEntry = $value;
+                        }
+                        break;
+                    }
+                }
+
+                if ($hasPipedEntry && $sourcePipeEntry !== null) {
+                    $forms = array_map('trim', explode('|', $sourcePipeEntry));
+                    
                     $nplurals = max(count($msgstrEntries), count($forms));
 
                     for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
-                        $result[] = 'msgstr[' . $formIdx . '] "' . ($forms[$formIdx] ?? '') . '"';
+                        $formValue = $forms[$formIdx] ?? '';
+                        $formValue = addcslashes($formValue, '"\\');
+                        $result[] = 'msgstr[' . $formIdx . '] "' . $formValue . '"';
                     }
                     $modified = true;
                 } else {
@@ -661,24 +1387,446 @@ class Translator
     }
 
     /**
-     * Check if all plural forms except the given index are empty
+     * Validate PO file for pipe-delimited plural entries
+     * Logs warnings if malformed entries are detected
      *
-     * @param array $msgstrLines Associative array of index => value
-     * @param int   $exceptIndex Index to skip
-     * @return bool
+     * @param string $poFile Path to PO file to validate
+     * @return bool True if file is clean, false if issues found
      */
-    private function allPluralFormsEmptyExcept(array $msgstrLines, int $exceptIndex)
+    private function validatePluralEntries($poFile)
     {
-        foreach ($msgstrLines as $idx => $val) {
-            if ($idx === $exceptIndex) {
-                continue;
-            }
-            if ($val !== '') {
-                return false;
+        $content = @file_get_contents($poFile);
+        if ($content === false || $content === '') {
+            return true;
+        }
+
+        $lines = explode("\n", $content);
+        $issues = 0;
+        $lineNum = 0;
+
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = rtrim($lines[$i], "\r");
+            $lineNum++;
+
+            if (preg_match('/^msgstr\[\d+\]\s+"(.*)"/', $line, $match)) {
+                $value = $match[1];
+
+                while ($i + 1 < count($lines) && preg_match('/^"(.*)"/', rtrim($lines[$i + 1], "\r"), $cont)) {
+                    $value .= $cont[1];
+                    $i++;
+                }
+
+                if (strpos($value, '|') !== false) {
+                    echo "  ⚠️  WARNING: Pipe-delimited msgstr at line " . ($lineNum) . ": " . substr($value, 0, 80) . "...\n";
+                    $issues++;
+                }
             }
         }
+
+        if ($issues > 0) {
+            echo "  ⚠️  Found $issues malformed plural entries. Running repair...\n";
+            $this->repairPluralPipeDelimitedEntries($poFile);
+            return false;
+        }
+
         return true;
     }
+
+
+    /**
+     * Get possible WordPress.org plugin slugs from composer.json extra field.
+     *
+     * Returns an array of slugs to try, in priority order.
+     *
+     * @return array Array of possible plugin slugs for wordpress.org
+     */
+    private function getWpOrgPluginSlugs()
+    {
+        $slugs = [];
+        $composerFile = $this->pluginRoot . '/composer.json';
+
+        if (file_exists($composerFile)) {
+            $composer = json_decode(file_get_contents($composerFile), true);
+
+            // Try plugin-slug first
+            if (isset($composer['extra']['plugin-slug'])) {
+                $slugs[] = $composer['extra']['plugin-slug'];
+            }
+
+            // Also try plugin-lang-domain as it might be the actual wp.org slug
+            if (isset($composer['extra']['plugin-lang-domain']) && 
+                !in_array($composer['extra']['plugin-lang-domain'], $slugs)) {
+                $slugs[] = $composer['extra']['plugin-lang-domain'];
+            }
+        }
+
+        return $slugs;
+    }
+
+    /**
+     * Get the plugin version from the main plugin file header.
+     *
+     * Scans PHP files in the plugin root for the standard WordPress "Version:" header.
+     *
+     * @return string|null Plugin version or null if not found
+     */
+    private function getPluginVersion()
+    {
+        $phpFiles = glob($this->pluginRoot . '/*.php');
+
+        foreach ($phpFiles as $phpFile) {
+            $content = @file_get_contents($phpFile, false, null, 0, 8192);
+            if ($content === false) {
+                continue;
+            }
+
+            if (preg_match('/^\s*\*?\s*Version:\s*(.+)$/mi', $content, $match)) {
+                return trim($match[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download translations from translate.wordpress.org for a given text domain.
+     *
+     * @param string $textDomain The plugin text domain
+     * @param bool   $silent     If true, suppress output messages
+     * @return int Number of languages downloaded
+     */
+    private function downloadFromWordPressOrg($textDomain, $silent = false)
+    {
+        $possibleSlugs = $this->getWpOrgPluginSlugs();
+        if (empty($possibleSlugs)) {
+            if (!$silent) {
+                fwrite(STDERR, "  Warning: Cannot determine wordpress.org plugin slug. Skipping wp.org download.\n");
+            }
+            return 0;
+        }
+
+        $pluginVersion = $this->getPluginVersion();
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 60,
+                'user_agent' => 'PublishPress-Translations/1.0',
+            ],
+        ]);
+
+        // Try each possible slug until we find translations
+        $data = null;
+        $wpOrgSlug = null;
+        
+        foreach ($possibleSlugs as $index => $slug) {
+            $apiUrl = 'https://api.wordpress.org/translations/plugins/1.0/';
+            $apiUrl .= '?slug=' . urlencode($slug);
+            if ($pluginVersion) {
+                $apiUrl .= '&version=' . urlencode($pluginVersion);
+            }
+
+            if (!$silent) {
+                if ($index === 0) {
+                    echo "  Fetching available translations from wordpress.org for '{$slug}'...\n";
+                } else {
+                    echo "  No translations found for previous slug, trying '{$slug}' (plugin-lang-domain)...\n";
+                }
+            }
+
+            $response = @file_get_contents($apiUrl, false, $context);
+            if ($response !== false) {
+                $decoded = json_decode($response, true);
+                if (is_array($decoded) && isset($decoded['translations']) && !empty($decoded['translations'])) {
+                    $data = $decoded;
+                    $wpOrgSlug = $slug;
+                    break;
+                }
+            }
+        }
+
+        if ($data === null) {
+            if (!$silent) {
+                echo "  No translations available on wordpress.org for any of: " . implode(', ', $possibleSlugs) . "\n";
+            }
+            return 0;
+        }
+
+        $availableTranslations = [];
+        foreach ($data['translations'] as $translation) {
+            if (isset($translation['language']) && isset($translation['package'])) {
+                $availableTranslations[$translation['language']] = $translation;
+            }
+        }
+
+        $allSupportedLanguages = array_unique(array_merge($this->targetLanguages, $this->skippedLanguages));
+
+        if (!$silent) {
+            echo "  Found " . count($availableTranslations) . " language(s) on wordpress.org\n";
+            echo "  Available wp.org languages: " . implode(', ', array_keys($availableTranslations)) . "\n";
+            echo "  Checking against all supported languages: " . implode(', ', $allSupportedLanguages) . "\n";
+        }
+
+        $downloaded = 0;
+        $tmpDir = sys_get_temp_dir() . '/pp-wporg-translations-' . uniqid();
+        @mkdir($tmpDir, 0755, true);
+
+        foreach ($allSupportedLanguages as $language) {
+            if (!isset($availableTranslations[$language])) {
+                if (!$silent) {
+                    echo "    Skipping {$language} (not available on wp.org)\n";
+                }
+                continue;
+            }
+
+            $packageUrl = $availableTranslations[$language]['package'];
+            if (empty($packageUrl)) {
+                continue;
+            }
+
+            $zipContent = @file_get_contents($packageUrl, false, $context);
+            if ($zipContent === false) {
+                if (!$silent) {
+                    fwrite(STDERR, "    Warning: Failed to download {$language} package from wordpress.org\n");
+                }
+                continue;
+            }
+
+            $zipFile = $tmpDir . '/' . $language . '.zip';
+            file_put_contents($zipFile, $zipContent);
+
+            $zip = new \ZipArchive();
+            if ($zip->open($zipFile) !== true) {
+                if (!$silent) {
+                    fwrite(STDERR, "    Warning: Failed to open zip for {$language}\n");
+                }
+                @unlink($zipFile);
+                continue;
+            }
+
+            $poExtracted = false;
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if (substr($entryName, -3) === '.po') {
+                    $poContent = $zip->getFromIndex($i);
+                    if ($poContent !== false) {
+                        $targetPoFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
+                        $merged = $this->mergeWpOrgTranslations($targetPoFile, $poContent, $language, $silent);
+                        $poExtracted = true;
+                        if ($merged) {
+                            $downloaded++;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            $zip->close();
+            @unlink($zipFile);
+
+            if (!$poExtracted && !$silent) {
+                echo "    No PO file found in {$language} package\n";
+            }
+        }
+
+        $tmpFiles = glob($tmpDir . '/*');
+        if ($tmpFiles) {
+            foreach ($tmpFiles as $f) {
+                @unlink($f);
+            }
+        }
+        @rmdir($tmpDir);
+
+        return $downloaded;
+    }
+
+    /**
+     * Merge translations from wordpress.org into an existing PO file.
+     *
+     * @param string $targetPoFile    Path to the target PO file
+     * @param string $wpOrgPoContent  Raw PO content downloaded from wordpress.org
+     * @param string $language        Language code
+     * @param bool   $silent          Suppress output
+     */
+    private function mergeWpOrgTranslations($targetPoFile, $wpOrgPoContent, $language, $silent = false)
+    {
+        $wpOrgMap = $this->parsePoContentToMap($wpOrgPoContent);
+
+        if (empty($wpOrgMap)) {
+            return '';
+        }
+
+        if (!file_exists($targetPoFile)) {
+            if (!$silent) {
+                echo "    Skipping {$language} (file doesn't exist locally)\n";
+            }
+            return false;
+        }
+
+        $existingContent = @file_get_contents($targetPoFile);
+        if ($existingContent === false || $existingContent === '') {
+            if (!$silent) {
+                echo "    Skipping {$language} (file is empty)\n";
+            }
+            return false;
+        }
+
+        $lines = explode("\n", $existingContent);
+        $result = [];
+        $overridden = 0;
+        $filled = 0;
+        $unchanged = 0;
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidLines = [$line];
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                    $msgidValue .= $cont[1];
+                    $msgidLines[] = $lines[$i];
+                    $i++;
+                }
+
+                foreach ($msgidLines as $ml) {
+                    $result[] = $ml;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgid_plural\s+/', $lines[$i])) {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgstr\s+"(.*)"$/', $lines[$i], $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $msgstrLineIdx = $i;
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', $lines[$i], $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if (isset($wpOrgMap[$msgidValue]) && $wpOrgMap[$msgidValue] !== '') {
+                        $wpOrgTranslation = $wpOrgMap[$msgidValue];
+                        $result[] = 'msgstr "' . $wpOrgTranslation . '"';
+
+                        if ($msgstrValue === '') {
+                            $filled++;
+                        } elseif ($msgstrValue !== $wpOrgTranslation) {
+                            $overridden++;
+                        } else {
+                            $unchanged++;
+                        }
+                    } else {
+                        for ($j = $msgstrLineIdx; $j < $i; $j++) {
+                            $result[] = $lines[$j];
+                        }
+                    }
+
+                    continue;
+                }
+
+                continue;
+            }
+            $result[] = $line;
+            $i++;
+        }
+
+        if (count($wpOrgMap) > 0) {
+            file_put_contents($targetPoFile, implode("\n", $result));
+        }
+
+        if ($overridden === 0 && $filled === 0 && $unchanged === 0) {
+            if (!$silent) {
+                echo "    Checking {$language} (no matching strings found - different POT structure)\n";
+            }
+            return false;
+        }
+        
+        if (!$silent && (count($wpOrgMap) > 0)) {
+            $parts = [];
+            if ($filled > 0) {
+                $parts[] = "{$filled} updated from wp.org translations";
+            }
+            if ($overridden > 0) {
+                $parts[] = "{$overridden} corrected from wp.org translations";
+            }
+            if ($unchanged > 0) {
+                $parts[] = "{$unchanged} already in sync with wp.org translations";
+            }
+            if (!empty($parts)) {
+                echo "    Merged wp.org translations for {$language}\n      (" . implode(', ', $parts) . ")\n";
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Parse PO file content into a simple msgid to msgstr map.
+     *
+     * Only handles single-form (non-plural) entries.
+     *
+     * @param string $poContent Raw PO file content
+     * @return array Map of msgid to msgstr
+     */
+    private function parsePoContentToMap($poContent)
+    {
+        $map = [];
+        $lines = explode("\n", $poContent);
+        $i = 0;
+        $count = count($lines);
+
+        while ($i < $count) {
+            $line = rtrim($lines[$i], "\r");
+
+            if (preg_match('/^msgid\s+"(.*)"$/', $line, $msgidMatch)) {
+                $msgidValue = $msgidMatch[1];
+                $i++;
+
+                while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                    $msgidValue .= $cont[1];
+                    $i++;
+                }
+
+                if ($msgidValue === '') {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgid_plural\s+/', rtrim($lines[$i], "\r"))) {
+                    continue;
+                }
+
+                if ($i < $count && preg_match('/^msgstr\s+"(.*)"$/', rtrim($lines[$i], "\r"), $msgstrMatch)) {
+                    $msgstrValue = $msgstrMatch[1];
+                    $i++;
+
+                    while ($i < $count && preg_match('/^"(.*)"$/', rtrim($lines[$i], "\r"), $cont)) {
+                        $msgstrValue .= $cont[1];
+                        $i++;
+                    }
+
+                    if ($msgstrValue !== '') {
+                        $map[$msgidValue] = $msgstrValue;
+                    }
+                }
+
+                continue;
+            }
+
+            $i++;
+        }
+
+        return $map;
+    }
+
 
     /**
      * Find all POT files
@@ -716,15 +1864,15 @@ class Translator
         $possiblePaths = [];
 
         if ($isDevWorkspace) {
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
         } else {
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic';
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic';
+            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
+            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
         }
 
         // Always check library's own potomatic (for development)
-        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic';
+        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic.js';
 
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
@@ -815,6 +1963,11 @@ class Translator
         $apiKey = $this->getApiKey();
         if ($apiKey) {
             $cmd .= ' --api-key ' . escapeshellarg($apiKey);
+        }
+
+        if ($this->tempDictionaryDir !== null && is_dir($this->tempDictionaryDir)) {
+            $cmd .= ' --use-dictionary';
+            $cmd .= ' --dictionary-path ' . escapeshellarg($this->tempDictionaryDir);
         }
 
         return $cmd;
@@ -931,6 +2084,9 @@ class Translator
             $languageCode = $matches[1];
 
             echo "    → Preparing {$languageCode}\n";
+
+            // Validate no malformed plural entries before uploading
+            $this->validatePluralEntries($poFile);
 
             $uploaded = false;
             $maxRetries = 3;
@@ -1242,12 +2398,16 @@ class Translator
                         file_put_contents($poFile, $poContent);
                         chmod($poFile, 0644);
 
+                        // Validate for malformed plural entries and repair if needed
+                        $this->validatePluralEntries($poFile);
+
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        $this->weblateClient->removeDuplicateReferences($poFile);
+                        $this->weblateClient->removeDuplicateExtractedComments($poFile);
                         
                         $this->revertPluginNameTranslations($poFile);
-                        
-                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
+
+                        $this->applyTranslationOverrides($poFile, $wpLocale);
 
                         if (!$silent) {
                             echo "  ✓ {$language}\n";
@@ -1355,114 +2515,12 @@ class Translator
     }
 
     /**
-     * Convert PO file to MO file
-     *
-     * @param string $poFile Path to PO file
-     * @param string $moFile Path to output MO file
-     * @return bool True on success
-     */
-    private function convertPoToMo($poFile, $moFile)
-    {
-        $entries = [];
-        $currentEntry = null;
-        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if (empty($line) || $line[0] === '#') {
-                continue;
-            }
-
-            if (strpos($line, 'msgid') === 0) {
-                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-                    $entries[] = $currentEntry;
-                }
-                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
-            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
-                $currentEntry['msgstr'] = $this->extractString($line);
-            }
-        }
-
-        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
-            $entries[] = $currentEntry;
-        }
-
-        $mo = $this->buildMoFile($entries);
-        $written = file_put_contents($moFile, $mo) !== false;
-        if ($written) {
-            chmod($moFile, 0644);
-        }
-
-        return $written;
-    }
-
-    /**
-     * Extract string from PO line
-     *
-     * @param string $line
-     * @return string
-     */
-    private function extractString($line)
-    {
-        if (preg_match('/"(.*)"/', $line, $matches)) {
-            return stripcslashes($matches[1]);
-        }
-        return '';
-    }
-
-    /**
-     * Build MO file content
-     *
-     * @param array $entries
-     * @return string
-     */
-    private function buildMoFile($entries)
-    {
-        $magic = 0x950412de;
-        $revision = 0;
-        $count = count($entries);
-
-        $idsOffset = 28;
-        $strsOffset = $idsOffset + 8 * $count;
-
-        $ids = '';
-        $strs = '';
-        $idsIndex = [];
-        $strsIndex = [];
-
-        foreach ($entries as $entry) {
-            $idsIndex[] = [strlen($ids), strlen($entry['msgid'])];
-            $ids .= $entry['msgid'] . "\0";
-
-            $strsIndex[] = [strlen($strs), strlen($entry['msgstr'])];
-            $strs .= $entry['msgstr'] . "\0";
-        }
-
-        $keysOffset = $strsOffset + 8 * $count;
-        $valsOffset = $keysOffset + strlen($ids);
-
-        $mo = pack('Iiiiiii', $magic, $revision, $count, $idsOffset, $strsOffset, 0, 0);
-
-        foreach ($idsIndex as $index) {
-            $mo .= pack('ii', $index[1], $keysOffset + $index[0]);
-        }
-
-        foreach ($strsIndex as $index) {
-            $mo .= pack('ii', $index[1], $valsOffset + $index[0]);
-        }
-
-        $mo .= $ids . $strs;
-
-        return $mo;
-    }
-
-    /**
      * Mark identical translations as fuzzy in PO file
      *
      * @param string $poFile
+     * @param string|null $language Target language code for override lookup
      */
-    private function markIdenticalTranslationsAsFuzzy($poFile)
+    private function markIdenticalTranslationsAsFuzzy($poFile, $language = null)
     {
         $content = @file_get_contents($poFile);
         if ($content === false) {
@@ -1472,6 +2530,33 @@ class Translator
         if ($content === '') {
             fwrite(STDERR, "Warning: Empty file: {$poFile}\n");
             return;
+        }
+
+        // Build set of words that are intentionally kept as-is
+        $protectedWords = [];
+
+        // 1. Dictionary defaults
+        $dictDefaults = $this->loadDictionaryDefaults();
+        foreach ($dictDefaults as $source => $target) {
+            if (strcasecmp($source, $target) === 0) {
+                $protectedWords[strtolower($source)] = true;
+            }
+        }
+
+        // 2. Plugin name
+        $pluginName = $this->getPluginNameForExclusion();
+        if ($pluginName) {
+            $protectedWords[strtolower($pluginName)] = true;
+        }
+
+        // 3. Current env var overrides for this language
+        if ($language !== null) {
+            $envOverrides = $this->getOverridesForLanguage($language);
+            foreach ($envOverrides as $source => $target) {
+                if (strcasecmp($source, $target) === 0) {
+                    $protectedWords[strtolower($source)] = true;
+                }
+            }
         }
 
         $lines  = explode("\n", $content);
@@ -1496,21 +2581,23 @@ class Translator
                     $msgstr = $msgstrMatch[1];
 
                     if ($msgid === $msgstr && $msgid !== '') {
-                        $commentIndex = count($result) - 1;
-                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
-                            $commentIndex--;
-                        }
-
-                        if ($commentIndex >= 0) {
-                            if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
-                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
-                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
-                                } else {
-                                    $result[$commentIndex] .= ', fuzzy';
-                                }
+                        if (!isset($protectedWords[strtolower($msgid)])) {
+                            $commentIndex = count($result) - 1;
+                            while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
+                                $commentIndex--;
                             }
-                        } else {
-                            $result[] = '#, fuzzy';
+
+                            if ($commentIndex >= 0) {
+                                if (!preg_match('/\bfuzzy\b/', $result[$commentIndex])) {
+                                    if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
+                                        $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
+                                    } else {
+                                        $result[$commentIndex] .= ', fuzzy';
+                                    }
+                                }
+                            } else {
+                                $result[] = '#, fuzzy';
+                            }
                         }
                     }
                 }
@@ -1536,6 +2623,11 @@ class Translator
         echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
+        
+        if (!empty($this->skippedLanguages)) {
+            echo "Skipped: " . implode(', ', $this->skippedLanguages) . " (handled by human translators)\n";
+        }
+        
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
 
@@ -1572,8 +2664,26 @@ class Translator
             return false;
         }
 
-        echo "📝 Step 2: Running AI translation with Potomatic...\n";
+        // Step 2: Download translations from translate.wordpress.org
+        if (!$this->dryRun) {
+            echo "📥 Step 2: Downloading translations from translate.wordpress.org...\n";
+            $totalWpOrgDownloaded = 0;
+            foreach ($potFiles as $potFile) {
+                $potFileName = basename($potFile);
+                $textDomain = str_replace('.pot', '', $potFileName);
+                $totalWpOrgDownloaded += $this->downloadFromWordPressOrg($textDomain);
+            }
+            if ($totalWpOrgDownloaded > 0) {
+                echo "✓ Merged translations from translate.wordpress.org for {$totalWpOrgDownloaded} language(s)\n\n";
+            } else {
+                echo "⊘ No translations found on wordpress.org\n\n";
+            }
+        }
+
+        echo "📝 Step 3: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
+
+        $this->createTempDictionaryDir();
 
         $success = true;
         foreach ($potFiles as $index => $potFile) {
@@ -1582,6 +2692,14 @@ class Translator
 
             echo "[" . ($index + 1) . "/" . count($potFiles) . "] Processing: {$potFileName}\n";
             echo "Text domain: {$textDomain}\n";
+
+            $existingPoFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
+            foreach ($existingPoFiles as $existingPoFile) {
+                $poLang = $this->extractLanguageFromPoFile($existingPoFile, $textDomain);
+                if ($poLang) {
+                    $this->clearStaleOverrides($existingPoFile, $poLang);
+                }
+            }
 
             try {
                 $command = $this->buildCommand($potFile, $textDomain);
@@ -1600,17 +2718,23 @@ class Translator
                     foreach ($poFiles as $poFile) {
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                            $this->weblateClient->removeDuplicateReferences($poFile);
+                            $this->weblateClient->removeDuplicateExtractedComments($poFile);
                         }
 
                         $this->repairPluralPipeDelimitedEntries($poFile);
                         
-                        $this->revertPluginNameTranslations($poFile);
+                        // Validate no malformed entries remain
+                        $this->validatePluralEntries($poFile);
                         
-                        $this->markIdenticalTranslationsAsFuzzy($poFile);
+                        $this->revertPluginNameTranslations($poFile);
 
-                        $baseName = basename($poFile, '.po');
-                        $moFile = $this->languagesDir . '/' . $baseName . '.mo';
-                        $this->convertPoToMo($poFile, $moFile);
+                        $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
+                        if ($poLanguage) {
+                            $this->applyTranslationOverrides($poFile, $poLanguage);
+                        }
+                        
+                        $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
@@ -1625,9 +2749,9 @@ class Translator
             }
         }
 
-        // Step 3: Upload updated translations to Weblate (if enabled)
+        // Step 4: Upload updated translations to Weblate (if enabled)
         if ($this->weblateEnabled && !$this->dryRun && $success) {
-            echo "\n📤 Step 3: Uploading updated translations to Weblate...\n\n";
+            echo "\n📤 Step 4: Uploading updated translations to Weblate...\n\n";
             foreach ($potFiles as $potFile) {
                 $potFileName = basename($potFile);
                 $textDomain = str_replace('.pot', '', $potFileName);
@@ -1639,6 +2763,10 @@ class Translator
                 }
             }
         }
+
+        $this->cleanupTempDictionaryDir();
+
+        $this->saveOverridesManifest();
 
         echo str_repeat('=', 50) . "\n";
         echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
