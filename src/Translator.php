@@ -27,11 +27,11 @@ class Translator
     private $languagesDir;
 
     /**
-     * Languages to skip
+     * Languages handled by human translators; skipped from AI translation and upload.
      *
      * @var array
      */
-    private $skippedLanguages = [
+    private $humanTranslatedLanguages = [
         'it_IT',
         'es_ES',
         'fr_FR',
@@ -44,7 +44,10 @@ class Translator
      */
     private $targetLanguages = [
         'de_DE',
+        'es_ES',
+        'fr_FR',
         'id_ID',
+        'it_IT',
         'fil',
         'ru_RU',
         'yor',
@@ -169,12 +172,12 @@ class Translator
             }
         }
 
-        // Allow configuring skipped languages via environment variable
-        $envSkipped = getenv('SKIP_LANGUAGES');
-        if ($envSkipped) {
-            $customSkipped = array_map('trim', explode(',', $envSkipped));
-            $this->skippedLanguages = array_merge($this->skippedLanguages, $customSkipped);
-            $this->skippedLanguages = array_unique($this->skippedLanguages);
+        // Allow configuring human-translated languages via environment variable.
+        // HUMAN_TRANSLATED_LANGUAGES is the canonical name; SKIP_LANGUAGES is kept for backward compatibility.
+        $envHumanTranslated = getenv('HUMAN_TRANSLATED_LANGUAGES') ?: getenv('SKIP_LANGUAGES');
+        if ($envHumanTranslated) {
+            $customHumanTranslated = array_map('trim', explode(',', $envHumanTranslated));
+            $this->humanTranslatedLanguages = array_unique(array_merge($this->humanTranslatedLanguages, $customHumanTranslated));
         }
     }
 
@@ -205,7 +208,7 @@ class Translator
      */
     public function setTargetLanguages(array $languages)
     {
-        $this->targetLanguages = array_diff($languages, $this->skippedLanguages);
+        $this->targetLanguages = array_values($languages);
         $this->customTargetLanguages = true;
     }
 
@@ -1557,7 +1560,7 @@ class Translator
             }
         }
 
-        $allSupportedLanguages = array_unique(array_merge($this->targetLanguages, $this->skippedLanguages));
+        $allSupportedLanguages = $this->targetLanguages;
 
         if (!$silent) {
             echo "  Found " . count($availableTranslations) . " language(s) on wordpress.org\n";
@@ -1924,6 +1927,17 @@ class Translator
     }
 
     /**
+     * Returns the subset of target languages that should be AI-translated.
+     * Excludes languages in the skip list, which are handled by human translators.
+     *
+     * @return array
+     */
+    private function getAiTranslationLanguages()
+    {
+        return array_values(array_diff($this->targetLanguages, $this->humanTranslatedLanguages));
+    }
+
+    /**
      * Build Potomatic command
      *
      * @param string $potFile
@@ -1942,7 +1956,7 @@ class Translator
             $cmd = escapeshellarg($potomatic);
         }
 
-        $cmd .= ' --target-languages ' . escapeshellarg(implode(',', $this->targetLanguages));
+        $cmd .= ' --target-languages ' . escapeshellarg(implode(',', $this->getAiTranslationLanguages()));
         $cmd .= ' --pot-file-path ' . escapeshellarg($potFile);
         $cmd .= ' --output-dir ' . escapeshellarg($this->languagesDir);
         $cmd .= ' --po-file-prefix ' . escapeshellarg($textDomain . '-');
@@ -2050,7 +2064,7 @@ class Translator
         if ($this->customTargetLanguages) {
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages) && !in_array($matches[1], $this->skippedLanguages)) {
+                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages) && !in_array($matches[1], $this->humanTranslatedLanguages)) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -2063,11 +2077,20 @@ class Translator
             echo "  • Uploading " . count($poFilesToUpload) . " language(s): " . implode(', ', $this->targetLanguages) . "\n";
         } else {
             // Filter out skipped languages from all PO files
+            $skippedInUpload = [];
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && !in_array($matches[1], $this->skippedLanguages)) {
-                    $poFilesToUpload[] = $poFile;
+                if (isset($matches[1])) {
+                    if (in_array($matches[1], $this->humanTranslatedLanguages)) {
+                        $skippedInUpload[] = $matches[1];
+                    } else {
+                        $poFilesToUpload[] = $poFile;
+                    }
                 }
+            }
+
+            if (!empty($skippedInUpload)) {
+                echo "  ⊘ Skipping upload for: " . implode(', ', $skippedInUpload) . " (handled by human translators)\n";
             }
         }
         
@@ -2223,7 +2246,13 @@ class Translator
         echo "\n📤 PublishPress Translation Upload\n";
         echo str_repeat('=', 50) . "\n\n";
         echo "Plugin: {$pluginSlug}\n";
-        echo "Path: {$this->pluginRoot}\n\n";
+        echo "Path: {$this->pluginRoot}\n";
+
+        if (!empty($this->humanTranslatedLanguages)) {
+            echo "Skipping AI: " . implode(', ', $this->humanTranslatedLanguages) . " (handled by human translators)\n";
+        }
+
+        echo "\n";
 
         $potFiles = $this->findPotFiles();
 
@@ -2310,7 +2339,14 @@ class Translator
             echo "\n⬇️  Downloading Translations from Weblate\n";
             echo str_repeat('=', 50) . "\n\n";
             echo "Plugin: {$pluginSlug}\n";
-            echo "Project: {$projectSlug}\n\n";
+            echo "Project: {$projectSlug}\n";
+
+            $humanTranslatedInRun = array_values(array_intersect($this->targetLanguages, $this->humanTranslatedLanguages));
+            if (!empty($humanTranslatedInRun)) {
+                echo "Including human-translated: " . implode(', ', $humanTranslatedInRun) . "\n";
+            }
+
+            echo "\n";
         }
 
         $potFiles = $this->findPotFiles();
@@ -2622,12 +2658,18 @@ class Translator
         echo str_repeat('=', 50) . "\n\n";
         echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
+        $aiLanguages = $this->getAiTranslationLanguages();
+        $humanTranslatedInRun = array_values(array_intersect($this->targetLanguages, $this->humanTranslatedLanguages));
+
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
-        
-        if (!empty($this->skippedLanguages)) {
-            echo "Skipped: " . implode(', ', $this->skippedLanguages) . " (handled by human translators)\n";
+        echo "AI translation: " . implode(', ', $aiLanguages) . "\n";
+
+        if (!empty($humanTranslatedInRun)) {
+            echo "Skipping AI: " . implode(', ', $humanTranslatedInRun) . " (handled by human translators)\n";
+        } elseif (!empty($this->humanTranslatedLanguages)) {
+            echo "Skipping AI: " . implode(', ', $this->humanTranslatedLanguages) . " (handled by human translators)\n";
         }
-        
+
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
 

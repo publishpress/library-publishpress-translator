@@ -184,17 +184,18 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
-- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR`)
-  Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
-  These languages are typically handled by human translators on Weblate.
-  The default skipped languages are merged with any custom ones you specify.
+- **`HUMAN_TRANSLATED_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR`)
+  Comma-separated list of language codes handled by human translators. These are excluded from AI translation and upload, but are still downloaded from Weblate.
+  Any languages you specify are merged with the defaults.
 
   ```bash
-  export SKIP_LANGUAGES=it_IT,es_ES,fr_FR
+  export HUMAN_TRANSLATED_LANGUAGES=it_IT,es_ES,fr_FR
   ```
 
+  > **`SKIP_LANGUAGES`** is still accepted as a backward-compatible alias.
+
 ```.env file
-SKIP_LANGUAGES=it_IT,es_ES,fr_FR,de_DE
+HUMAN_TRANSLATED_LANGUAGES=it_IT,es_ES,fr_FR,de_DE
 ```
 
 ### Complete Translation Workflow
@@ -314,7 +315,7 @@ vendor/bin/publishpress-translate --clean-po
 **When to use:**
 - After downloading from Weblate (if duplicates accumulated)
 - Before uploading to Weblate to keep files clean
-- As maintenance on skipped languages (which shouldn't be touched by AI translation)
+- As maintenance on human-translated languages (which are never touched by AI translation)
 - Works independently of translation workflow
 
 **Important:** This command only processes `.po` files and doesn't interact with Weblate or run AI translation.
@@ -386,21 +387,21 @@ The tool translates into these languages by default:
 - Chinese (China) (zh_CN)
 - Chinese (Taiwan) (zh_TW)
 
-### Skipped Languages
- 
-The following languages should not be translated by Potomatic, they are handled by human translators:
+### Human-Translated Languages
+
+The following languages are handled by human translators in Weblate and are excluded from AI translation:
 - Italian (it_IT)
 - Spanish (es_ES)
 - French (fr_FR)
- 
-These languages will be skipped during translation and upload processes, even if PO files exist for them.
 
-**How Skipped Languages Work:**
+**How human-translated languages are handled:**
 
-1. **Translation (`composer translate`)** - Skipped languages are not passed to Potomatic AI translation
-2. **Upload (`composer translate:upload`)** - Skipped languages are NOT uploaded to Weblate
-3. **Download (`composer translate:download`)** - Skipped languages ARE downloaded from Weblate (translations can be pulled but not replaced by AI)
-4. **Cleaning/Syncing** - Skipped languages ARE operated on by `--clean-po` and `--sync-files` commands (useful for maintenance without risk of overwriting with AI)
+1. **Translation (`composer translate`)** - Not passed to Potomatic; AI translation is skipped for these languages
+2. **Upload (`composer translate:upload`)** - NOT uploaded to Weblate (human translators manage them directly)
+3. **Download (`composer translate:download`)** - ARE downloaded from Weblate so human-contributed translations are kept up to date locally
+4. **Cleaning/Syncing** - ARE operated on by `--clean-po` and `--sync-files` (safe for maintenance without risk of overwriting with AI)
+
+To add more languages to this list, set `HUMAN_TRANSLATED_LANGUAGES` in your environment (see [Environment Variables](#environment-variables) above).
 
 ### Preventing Plugin Name Translation
 
