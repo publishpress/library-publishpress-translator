@@ -65,6 +65,7 @@ class WeblateClient
                 'Accept' => 'application/json',
             ],
             'timeout' => (int) $timeout,
+            'connect_timeout' => (int) $timeout,
         ]);
     }
 
