@@ -997,9 +997,9 @@ class Translator
 
                 $matchedOverrides = [];
                 foreach ($overrides as $source => $target) {
-                    if (strcasecmp($msgidValue, $source) === 0) {
+                    if (strcmp($msgidValue, $source) === 0) {
                         $matchedOverrides[$source] = ['target' => $target, 'exact' => true];
-                    } elseif (mb_stripos($msgidValue, $source) !== false) {
+                    } elseif (mb_strpos($msgidValue, $source) !== false) {
                         $matchedOverrides[$source] = ['target' => $target, 'exact' => false];
                     }
                 }
@@ -1048,9 +1048,9 @@ class Translator
                         } else {
                             $escaped = preg_quote($source, '/');
                             if (strpos($source, ' ') !== false) {
-                                $pattern = '/' . $escaped . '/iu';
+                                $pattern = '/' . $escaped . '/u';
                             } else {
-                                $pattern = '/\b' . $escaped . '\b/iu';
+                                $pattern = '/\b' . $escaped . '\b/u';
                             }
                             $before = $modified;
                             $modified = preg_replace($pattern, $info['target'], $modified);
@@ -2716,6 +2716,13 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
+                        $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
+                        
+                        // Skip processing if --languages flag is set and this language is not in the target list
+                        if ($this->customTargetLanguages && $poLanguage && !in_array($poLanguage, $this->targetLanguages)) {
+                            continue;
+                        }
+                        
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                             $this->weblateClient->removeDuplicateReferences($poFile);
@@ -2729,7 +2736,6 @@ class Translator
                         
                         $this->revertPluginNameTranslations($poFile);
 
-                        $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
                         if ($poLanguage) {
                             $this->applyTranslationOverrides($poFile, $poLanguage);
                         }
