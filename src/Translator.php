@@ -12,6 +12,8 @@ use Exception;
 
 class Translator
 {
+    private const CLI_BANNER_TITLE = 'PublishPress Translator';
+
     /**
      * Plugin root directory
      *
@@ -144,15 +146,23 @@ class Translator
     private $tempDictionaryDir = null;
 
     /**
+     * Output instance
+     *
+     * @var Output
+     */
+    private $output;
+
+    /**
      * Constructor
      *
      * @param string $pluginRoot Plugin root directory
      * @throws Exception
      */
-    public function __construct($pluginRoot)
+    public function __construct($pluginRoot, Output $output)
     {
         $this->pluginRoot = rtrim($pluginRoot, '/\\');
         $this->languagesDir = $this->pluginRoot . '/languages';
+        $this->output = $output;
 
         if (!is_dir($this->languagesDir)) {
             throw new Exception("Languages directory not found: {$this->languagesDir}");
@@ -219,6 +229,73 @@ class Translator
         $this->weblateEnabled = (bool) $enabled;
     }
 
+    private function getTranslatorPackageVersion(): string
+    {
+        if (!class_exists('\Composer\InstalledVersions')) {
+            return 'dev';
+        }
+
+        try {
+            $v = \Composer\InstalledVersions::getPrettyVersion('publishpress/translations');
+            if ($v !== null && $v !== '') {
+                return $v;
+            }
+        } catch (\Throwable $e) {
+            // Not listed as installed package (e.g. some path-repo layouts).
+        }
+
+        return 'dev';
+    }
+
+    /**
+     * Print banner, package version, and plugin information block.
+     *
+     * @return float microtime(true) start for runtime footer
+     */
+    private function writeCliBannerAndPluginContext(string $bannerTitle = self::CLI_BANNER_TITLE): float
+    {
+        $start = microtime(true);
+        $this->output->banner($bannerTitle);
+        $this->output->blankLine();
+        $this->output->versionLine('Translator package', $this->getTranslatorPackageVersion());
+        $this->output->blankLine();
+        $this->output->separator();
+        $this->writeCliPluginInformationBlock();
+
+        return $start;
+    }
+
+    private function writeCliPluginInformationBlock(): void
+    {
+        $this->output->blankLine();
+        $this->output->sectionHeading('Plugin information:');
+        $name = $this->getPluginNameForExclusion();
+        if ($name === null || $name === '') {
+            $name = $this->getPluginSlug();
+        }
+        $wpSlugs = $this->getWpOrgPluginSlugs();
+        $slugDisplay = !empty($wpSlugs) ? $wpSlugs[0] : $this->getPluginSlug();
+        $folder = basename($this->pluginRoot);
+        $version = $this->getPluginVersion();
+        $this->output->bullet('Name: ' . $name);
+        $this->output->bullet('Slug: ' . $slugDisplay);
+        $this->output->bullet('Folder: ' . $folder);
+        $this->output->bullet('Version: ' . ($version !== null ? $version : 'n/a'));
+        $this->output->blankLine();
+        $this->output->separator();
+    }
+
+    private function writeCliCompletion(float $start, bool $success): void
+    {
+        $this->output->runtime(microtime(true) - $start);
+        if ($success) {
+            $this->output->executedSuccessfully();
+        } else {
+            $this->output->finishedWithErrors();
+        }
+        $this->output->blankLine();
+    }
+
     /**
      * Repair malformed plural entries in all existing .po files.
      *
@@ -230,18 +307,20 @@ class Translator
      */
     public function repairPluralEntries()
     {
-        echo "\n🔧 Repairing plural entries in existing .po files\n";
-        echo str_repeat('=', 50) . "\n\n";
-        echo "Path: {$this->languagesDir}\n\n";
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Repairing plural entries in existing .po files');
+        $this->output->step('Languages directory: ' . $this->languagesDir);
 
         $poFiles = glob($this->languagesDir . '/*.po');
 
         if (empty($poFiles)) {
             fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
             return false;
         }
 
-        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+        $this->output->step('Found ' . count($poFiles) . ' .po file(s)');
 
         $repaired = 0;
         foreach ($poFiles as $poFile) {
@@ -251,18 +330,19 @@ class Translator
 
             if ($before !== $after) {
                 $baseName = basename($poFile);
-                echo "  ✓ Repaired: {$baseName}\n";
+                $this->output->step('Repaired: ' . $baseName);
                 $repaired++;
             }
         }
 
-        echo "\n" . str_repeat('=', 50) . "\n";
-
+        $this->output->separator();
         if ($repaired > 0) {
-            echo "✨ Repaired {$repaired} file(s) with malformed plural entries.\n\n";
+            $this->output->line('Repaired ' . $repaired . ' file(s) with malformed plural entries.');
         } else {
-            echo "✨ No malformed plural entries found — all files are clean.\n\n";
+            $this->output->line('No malformed plural entries found — all files are clean.');
         }
+
+        $this->writeCliCompletion($start, true);
 
         return true;
     }
@@ -274,18 +354,20 @@ class Translator
      */
     public function cleanPoFiles()
     {
-        echo "\n✨ Cleaning duplicate entries from .po files\n";
-        echo str_repeat('=', 50) . "\n\n";
-        echo "Path: {$this->languagesDir}\n\n";
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Cleaning duplicate entries from .po files');
+        $this->output->step('Languages directory: ' . $this->languagesDir);
 
         $poFiles = glob($this->languagesDir . '/*.po');
 
         if (empty($poFiles)) {
             fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
             return false;
         }
 
-        echo "Found " . count($poFiles) . " .po file(s)\n\n";
+        $this->output->step('Found ' . count($poFiles) . ' .po file(s)');
 
         if (!$this->weblateClient) {
             fwrite(STDERR, "Warning: Weblate client not initialized.\n");
@@ -293,7 +375,6 @@ class Translator
         }
 
         $cleaned = 0;
-        $cleanedWith = [];
 
         foreach ($poFiles as $poFile) {
             $baseName = basename($poFile);
@@ -309,19 +390,20 @@ class Translator
 
             if ($before !== $after) {
                 $cleaned++;
-                echo "  ✓ Cleaned: {$baseName}\n";
+                $this->output->step('Cleaned: ' . $baseName);
             } else {
-                echo "  ⊘ Clean: {$baseName}\n";
+                $this->output->step('Already clean: ' . $baseName);
             }
         }
 
-        echo "\n" . str_repeat('=', 50) . "\n";
-
+        $this->output->separator();
         if ($cleaned > 0) {
-            echo "✨ Cleaned {$cleaned} file(s) with duplicate entries.\n\n";
+            $this->output->line('Cleaned ' . $cleaned . ' file(s) with duplicate entries.');
         } else {
-            echo "✨ All .po files are already clean — no duplicates found.\n\n";
+            $this->output->line('All .po files are already clean — no duplicates found.');
         }
+
+        $this->writeCliCompletion($start, true);
 
         return true;
     }
@@ -334,18 +416,20 @@ class Translator
      */
     public function syncPoAndMoFiles()
     {
-        echo "\n🔄 Checking translation file status\n";
-        echo str_repeat('=', 50) . "\n\n";
-        echo "Path: {$this->languagesDir}\n\n";
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Checking translation file status (.po vs compiled formats)');
+        $this->output->step('Languages directory: ' . $this->languagesDir);
 
         $poFiles = glob($this->languagesDir . '/*.po') ?: [];
 
         if (empty($poFiles)) {
             fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
             return false;
         }
 
-        echo "Found " . count($poFiles) . " .po file(s):\n\n";
+        $this->output->step('Found ' . count($poFiles) . ' .po file(s)');
 
         $missingCompiled = [];
 
@@ -353,69 +437,68 @@ class Translator
             $baseName = basename($poFile, '.po');
             $poMtime = filemtime($poFile);
 
-            echo "  📄 {$baseName}.po\n";
+            $this->output->line('');
+            $this->output->line('  ' . $baseName . '.po');
 
             // Check .mo file
             $moFile = $this->languagesDir . '/' . $baseName . '.mo';
             if (!file_exists($moFile)) {
-                echo "     ⊘ .mo (missing)\n";
+                $this->output->line('     ⊘ .mo (missing)');
                 $missingCompiled[] = $baseName . '.mo';
             } else {
                 $moMtime = filemtime($moFile);
                 if ($poMtime > $moMtime) {
-                    echo "     ⚠ .mo (outdated)\n";
+                    $this->output->line('     ⚠ .mo (outdated)');
                     $missingCompiled[] = $baseName . '.mo';
                 } else {
-                    echo "     ✓ .mo (up-to-date)\n";
+                    $this->output->line('     ✓ .mo (up-to-date)');
                 }
             }
 
             // Check .json file
             $jsonFile = $this->languagesDir . '/' . $baseName . '.json';
             if (!file_exists($jsonFile)) {
-                echo "     ⊘ .json (missing)\n";
+                $this->output->line('     ⊘ .json (missing)');
                 $missingCompiled[] = $baseName . '.json';
             } else {
                 $jsonMtime = filemtime($jsonFile);
                 if ($poMtime > $jsonMtime) {
-                    echo "     ⚠ .json (outdated)\n";
+                    $this->output->line('     ⚠ .json (outdated)');
                     $missingCompiled[] = $baseName . '.json';
                 } else {
-                    echo "     ✓ .json (up-to-date)\n";
+                    $this->output->line('     ✓ .json (up-to-date)');
                 }
             }
 
             // Check .l10n.php file
             $phpFile = $this->languagesDir . '/' . $baseName . '.l10n.php';
             if (!file_exists($phpFile)) {
-                echo "     ⊘ .l10n.php (missing)\n";
+                $this->output->line('     ⊘ .l10n.php (missing)');
                 $missingCompiled[] = $baseName . '.l10n.php';
             } else {
                 $phpMtime = filemtime($phpFile);
                 if ($poMtime > $phpMtime) {
-                    echo "     ⚠ .l10n.php (outdated)\n";
+                    $this->output->line('     ⚠ .l10n.php (outdated)');
                     $missingCompiled[] = $baseName . '.l10n.php';
                 } else {
-                    echo "     ✓ .l10n.php (up-to-date)\n";
+                    $this->output->line('     ✓ .l10n.php (up-to-date)');
                 }
             }
-
-            echo "\n";
         }
 
-        echo str_repeat('=', 50) . "\n";
-
+        $this->output->separator();
         if (!empty($missingCompiled)) {
-            echo "\n⚠️  Found " . count($missingCompiled) . " file(s) that need compilation:\n";
+            $this->output->warning('Found ' . count($missingCompiled) . ' file(s) that need compilation:');
             foreach ($missingCompiled as $file) {
-                echo "  - {$file}\n";
+                $this->output->line('  - ' . $file);
             }
-            echo "\nRun 'composer translate:compile' to compile these files from their .po sources.\n";
+            $this->output->line('');
+            $this->output->line("Run 'composer translate:compile' to compile these files from their .po sources.");
         } else {
-            echo "\n✨ All translation files are up-to-date.\n";
+            $this->output->line('All translation files are up-to-date.');
         }
 
-        echo "\n";
+        $this->writeCliCompletion($start, true);
 
         return true;
     }
@@ -890,8 +973,9 @@ class Translator
         }
 
         $wordList = array_unique($wordList);
-        echo "📋 Created temporary translation-overrides directory to exclude/override the following words:\n";
-        echo "   " . implode(', ', $wordList) . "\n\n";
+        $this->output->step(
+            'Created temporary translation-overrides directory for: ' . implode(', ', $wordList)
+        );
 
         return $tmpDir;
     }
@@ -913,7 +997,7 @@ class Translator
         }
 
         @rmdir($this->tempDictionaryDir);
-        echo "🧹 Deleted temporary translation-overrides directory\n";
+        $this->output->step('Deleted temporary translation-overrides directory');
         $this->tempDictionaryDir = null;
     }
 
@@ -1244,7 +1328,7 @@ class Translator
                     if ($msgstrValue === $msgidValue) {
                         $result[] = 'msgstr ""';
                         $totalCleared++;
-                        echo "    Clearing stale override '{$msgidValue}' for re-translation\n";
+                        $this->output->step("Clearing stale override '{$msgidValue}' for re-translation");
                     } else {
                         $result[] = 'msgstr "' . $msgstrValue . '"';
                     }
@@ -1261,7 +1345,7 @@ class Translator
 
         if ($totalCleared > 0) {
             file_put_contents($poFile, implode("\n", $result));
-            echo "  Cleared {$totalCleared} stale override(s) in {$language} for re-translation\n";
+            $this->output->step("Cleared {$totalCleared} stale override(s) in {$language} for re-translation");
         }
     }
 
@@ -1417,14 +1501,16 @@ class Translator
                 }
 
                 if (strpos($value, '|') !== false) {
-                    echo "  ⚠️  WARNING: Pipe-delimited msgstr at line " . ($lineNum) . ": " . substr($value, 0, 80) . "...\n";
+                    $this->output->warning(
+                        'WARNING: Pipe-delimited msgstr at line ' . $lineNum . ': ' . substr($value, 0, 80) . '...'
+                    );
                     $issues++;
                 }
             }
         }
 
         if ($issues > 0) {
-            echo "  ⚠️  Found $issues malformed plural entries. Running repair...\n";
+            $this->output->warning("Found {$issues} malformed plural entries. Running repair...");
             $this->repairPluralPipeDelimitedEntries($poFile);
             return false;
         }
@@ -1454,8 +1540,10 @@ class Translator
             }
 
             // Also try plugin-lang-domain as it might be the actual wp.org slug
-            if (isset($composer['extra']['plugin-lang-domain']) &&
-                !in_array($composer['extra']['plugin-lang-domain'], $slugs)) {
+            if (
+                isset($composer['extra']['plugin-lang-domain']) &&
+                !in_array($composer['extra']['plugin-lang-domain'], $slugs)
+            ) {
                 $slugs[] = $composer['extra']['plugin-lang-domain'];
             }
         }
@@ -1526,9 +1614,9 @@ class Translator
 
             if (!$silent) {
                 if ($index === 0) {
-                    echo "  Fetching available translations from wordpress.org for '{$slug}'...\n";
+                    $this->output->step("Fetching available translations from wordpress.org for '{$slug}'");
                 } else {
-                    echo "  No translations found for previous slug, trying '{$slug}' (plugin-lang-domain)...\n";
+                    $this->output->step("No translations found for previous slug, trying '{$slug}' (plugin-lang-domain)");
                 }
             }
 
@@ -1545,7 +1633,7 @@ class Translator
 
         if ($data === null) {
             if (!$silent) {
-                echo "  No translations available on wordpress.org for any of: " . implode(', ', $possibleSlugs) . "\n";
+                $this->output->step('No translations available on wordpress.org for any of: ' . implode(', ', $possibleSlugs));
             }
             return 0;
         }
@@ -1560,9 +1648,9 @@ class Translator
         $allSupportedLanguages = array_unique(array_merge($this->targetLanguages, $this->skippedLanguages));
 
         if (!$silent) {
-            echo "  Found " . count($availableTranslations) . " language(s) on wordpress.org\n";
-            echo "  Available wp.org languages: " . implode(', ', array_keys($availableTranslations)) . "\n";
-            echo "  Checking against all supported languages: " . implode(', ', $allSupportedLanguages) . "\n";
+            $this->output->step('Found ' . count($availableTranslations) . ' language(s) on wordpress.org');
+            $this->output->step('Available wp.org languages: ' . implode(', ', array_keys($availableTranslations)));
+            $this->output->step('Checking against all supported languages: ' . implode(', ', $allSupportedLanguages));
         }
 
         $downloaded = 0;
@@ -1572,7 +1660,7 @@ class Translator
         foreach ($allSupportedLanguages as $language) {
             if (!isset($availableTranslations[$language])) {
                 if (!$silent) {
-                    echo "    Skipping {$language} (not available on wp.org)\n";
+                    $this->output->step("Skipping {$language} (not available on wp.org)");
                 }
                 continue;
             }
@@ -1623,7 +1711,7 @@ class Translator
             @unlink($zipFile);
 
             if (!$poExtracted && !$silent) {
-                echo "    No PO file found in {$language} package\n";
+                $this->output->step("No PO file found in {$language} package");
             }
         }
 
@@ -1656,7 +1744,7 @@ class Translator
 
         if (!file_exists($targetPoFile)) {
             if (!$silent) {
-                echo "    Skipping {$language} (file doesn't exist locally)\n";
+                $this->output->step("Skipping {$language} (file doesn't exist locally)");
             }
             return false;
         }
@@ -1664,7 +1752,7 @@ class Translator
         $existingContent = @file_get_contents($targetPoFile);
         if ($existingContent === false || $existingContent === '') {
             if (!$silent) {
-                echo "    Skipping {$language} (file is empty)\n";
+                $this->output->step("Skipping {$language} (file is empty)");
             }
             return false;
         }
@@ -1745,7 +1833,7 @@ class Translator
 
         if ($overridden === 0 && $filled === 0 && $unchanged === 0) {
             if (!$silent) {
-                echo "    Checking {$language} (no matching strings found - different POT structure)\n";
+                $this->output->step("Checking {$language} (no matching strings found - different POT structure)");
             }
             return false;
         }
@@ -1762,7 +1850,7 @@ class Translator
                 $parts[] = "{$unchanged} already in sync with wp.org translations";
             }
             if (!empty($parts)) {
-                echo "    Merged wp.org translations for {$language}\n      (" . implode(', ', $parts) . ")\n";
+                $this->output->step("Merged wp.org translations for {$language} (" . implode(', ', $parts) . ')');
                 return true;
             }
         }
@@ -1986,24 +2074,25 @@ class Translator
             throw new Exception('Weblate client not initialized');
         }
 
-        echo "\n Uploading to Weblate...\n";
+        $this->output->separator();
+        $this->output->phase('Uploading to Weblate');
 
         $pluginSlug   = $this->getPluginSlug();
         $projectSlug  = $this->getWeblateProjectSlug();
         $componentSlug = $this->getWeblateComponentSlug($textDomain);
 
         // Step 1: Ensure project exists
-        echo "  • Checking project '{$projectSlug}'...\n";
+        $this->output->step("Checking project '{$projectSlug}'");
         if (!$this->weblateClient->projectExists($projectSlug)) {
-            echo "  • Creating project '{$projectSlug}'...\n";
+            $this->output->step("Creating project '{$projectSlug}'");
             $this->weblateClient->createProject($projectSlug, $pluginSlug, $this->getGitRepoUrl());
         }
 
         // Step 2: Ensure component exists, auto-create if needed
-        echo "  • Checking component '{$componentSlug}'...\n";
+        $this->output->step("Checking component '{$componentSlug}'");
 
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
-            echo "  • Creating component '{$componentSlug}'...\n";
+            $this->output->step("Creating component '{$componentSlug}'");
             try {
                 $this->weblateClient->createComponent(
                     $projectSlug,
@@ -2012,7 +2101,7 @@ class Translator
                     $potFile,
                     $this->getGitRepoUrl()
                 );
-                echo "  ✓ Component created successfully\n";
+                $this->output->step('Component created successfully');
             } catch (Exception $e) {
                 $message = $e->getMessage();
 
@@ -2030,17 +2119,17 @@ class Translator
             }
         }
 
-        echo "  • Uploading POT file (source strings)...\n";
+        $this->output->step('Uploading POT file (source strings)');
         try {
             $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
-            echo "  ✓ POT file uploaded\n";
+            $this->output->step('POT file uploaded');
         } catch (Exception $e) {
-            echo "  ⚠️  Warning: POT upload failed: " . $e->getMessage() . "\n";
-            echo "  Continuing with PO file uploads...\n";
+            $this->output->warning('POT upload failed: ' . $e->getMessage());
+            $this->output->step('Continuing with PO file uploads');
         }
 
         // Step 3: Upload PO files
-        echo "  • Uploading translation files...\n";
+        $this->output->step('Uploading translation files');
 
         // Get all PO files
         $allPoFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
@@ -2056,11 +2145,11 @@ class Translator
             }
 
             if (empty($poFilesToUpload)) {
-                echo "  ⚠️  No PO files found matching specified languages: " . implode(', ', $this->targetLanguages) . "\n";
+                $this->output->warning('No PO files found matching specified languages: ' . implode(', ', $this->targetLanguages));
                 return;
             }
 
-            echo "  • Uploading " . count($poFilesToUpload) . " language(s): " . implode(', ', $this->targetLanguages) . "\n";
+            $this->output->step('Uploading ' . count($poFilesToUpload) . ' language(s): ' . implode(', ', $this->targetLanguages));
         } else {
             // Filter out skipped languages from all PO files
             foreach ($allPoFiles as $poFile) {
@@ -2083,7 +2172,7 @@ class Translator
 
             $languageCode = $matches[1];
 
-            echo "    → Preparing {$languageCode}\n";
+            $this->output->step("Preparing {$languageCode}");
 
             // Validate no malformed plural entries before uploading
             $this->validatePluralEntries($poFile);
@@ -2095,7 +2184,7 @@ class Translator
                 try {
                     $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
                     $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
-                    echo "    ✓ Uploaded {$languageCode}\n";
+                    $this->output->step("Uploaded {$languageCode}");
                     $uploadedCount++;
                     $uploaded = true;
                     break;
@@ -2107,19 +2196,21 @@ class Translator
                         strpos($e->getMessage(), 'read-only') !== false &&
                         in_array($languageCode, ['en', 'en_US', 'en_GB'])
                     ) {
-                        echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                        $this->output->step("{$languageCode} (source language, read-only)");
                         $uploaded = true;
                         break;
                     }
 
                     // Check for duplicate constraint error
-                    if (strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false ||
-                        strpos($e->getMessage(), 'trans_unit_translation_id_id_hash') !== false) {
-                        echo "      ⚠️  Duplicate entries detected, cleaning PO file...\n";
+                    if (
+                        strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false ||
+                        strpos($e->getMessage(), 'trans_unit_translation_id_id_hash') !== false
+                    ) {
+                        $this->output->warning('Duplicate entries detected, cleaning PO file');
                         $this->deduplicatePoFile($poFile);
 
                         if ($attempt < $maxRetries) {
-                            echo "      🔄 Retrying upload after cleanup...\n";
+                            $this->output->step('Retrying upload after cleanup');
                             sleep(2);
                             continue;
                         }
@@ -2127,7 +2218,7 @@ class Translator
 
                     if (($is503 || $isTlsError) && $attempt < $maxRetries) {
                         $backoffDelay = $attempt * 10;
-                        echo "    ⏳ Retrying {$languageCode} after {$backoffDelay}s (attempt {$attempt}/{$maxRetries})...\n";
+                        $this->output->step("Retrying {$languageCode} after {$backoffDelay}s (attempt {$attempt}/{$maxRetries})");
                         sleep($backoffDelay);
                         continue;
                     }
@@ -2146,10 +2237,11 @@ class Translator
         if ($failedCount > 0) {
             fwrite(STDERR, "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n");
         } else {
-            echo "  ✓ All translations uploaded\n";
+            $this->output->step('All translations uploaded');
         }
 
-        echo "  View at: https://weblate.publishpress.com/projects/{$projectSlug}/{$componentSlug}/\n\n";
+        $this->output->step('View at: https://weblate.publishpress.com/projects/' . $projectSlug . '/' . $componentSlug . '/');
+        $this->output->blankLine();
     }
 
     /**
@@ -2219,28 +2311,27 @@ class Translator
         }
 
         $pluginSlug = $this->getPluginSlug();
-
-        echo "\n📤 PublishPress Translation Upload\n";
-        echo str_repeat('=', 50) . "\n\n";
-        echo "Plugin: {$pluginSlug}\n";
-        echo "Path: {$this->pluginRoot}\n\n";
+        $start = $this->writeCliBannerAndPluginContext();
 
         $potFiles = $this->findPotFiles();
 
         if (empty($potFiles)) {
             fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
             return false;
         }
 
-        echo "📤 Uploading translations to Weblate...\n";
-        echo "POT files found: " . count($potFiles) . "\n\n";
+        $this->output->phase('Uploading translations to Weblate');
+        $this->output->step('POT files found: ' . count($potFiles));
 
         $success = true;
         foreach ($potFiles as $potFile) {
             $potFileName = basename($potFile);
             $textDomain = str_replace('.pot', '', $potFileName);
 
-            echo "[" . basename($potFile) . "]\n";
+            $this->output->separator();
+            $this->output->step('Component POT: ' . basename($potFile));
 
             try {
                 $this->uploadToWeblateInternal($potFile, $textDomain);
@@ -2250,8 +2341,9 @@ class Translator
             }
         }
 
-        echo str_repeat('=', 50) . "\n";
-        echo "✨ Upload " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
+        $this->output->separator();
+        $this->output->line('Upload ' . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}.");
+        $this->writeCliCompletion($start, $success);
 
         return $success;
     }
@@ -2303,14 +2395,13 @@ class Translator
             return false;
         }
 
-        $pluginSlug = $this->getPluginSlug();
         $projectSlug = $this->getWeblateProjectSlug();
+        $start = null;
 
         if (!$silent) {
-            echo "\n⬇️  Downloading Translations from Weblate\n";
-            echo str_repeat('=', 50) . "\n\n";
-            echo "Plugin: {$pluginSlug}\n";
-            echo "Project: {$projectSlug}\n\n";
+            $start = $this->writeCliBannerAndPluginContext();
+            $this->output->phase('Downloading translations from Weblate');
+            $this->output->step('Weblate project: ' . $projectSlug);
         }
 
         $potFiles = $this->findPotFiles();
@@ -2318,12 +2409,17 @@ class Translator
         if (empty($potFiles)) {
             if (!$silent) {
                 fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+                if ($start !== null) {
+                    $this->writeCliCompletion($start, false);
+                }
             }
             return false;
         }
 
-        echo "📤 Downloading translations from Weblate...\n";
-        echo "POT files found: " . count($potFiles) . "\n\n";
+        if (!$silent) {
+            $this->output->step('POT files found: ' . count($potFiles));
+            $this->output->blankLine();
+        }
 
         $success = true;
         $totalDownloaded = 0;
@@ -2334,7 +2430,8 @@ class Translator
             $componentSlug = $this->getWeblateComponentSlug($textDomain);
 
             if (!$silent) {
-                echo "Component: {$componentSlug}\n";
+                $this->output->separator();
+                $this->output->step('Weblate component: ' . $componentSlug);
             }
 
             $cleanExisting = getenv('WEBLATE_CLEAN_EXISTING_TRANSLATIONS') === 'true' || getenv('WEBLATE_CLEAN_EXISTING_TRANSLATIONS') === '1';
@@ -2386,7 +2483,7 @@ class Translator
             foreach ($languagesToDownload as $language) {
                 try {
                     if (!$silent) {
-                        echo "    → Downloading {$language}\n";
+                        $this->output->step("Downloading {$language}");
                     }
 
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $componentSlug, $language);
@@ -2410,17 +2507,17 @@ class Translator
                         $this->applyTranslationOverrides($poFile, $wpLocale);
 
                         if (!$silent) {
-                            echo "  ✓ {$language}\n";
+                            $this->output->step("Saved {$language}");
                         }
                         $totalDownloaded++;
                     } else {
                         if (!$silent) {
-                            echo "  ⊘ {$language} (not available)\n";
+                            $this->output->step("{$language} (not available)");
                         }
                     }
                 } catch (Exception $e) {
                     if (!$silent) {
-                        echo "  ✗ {$language}: " . $e->getMessage() . "\n";
+                        $this->output->warning("{$language}: " . $e->getMessage());
                     }
                 }
             }
@@ -2428,13 +2525,14 @@ class Translator
             $this->cleanupDuplicateLocaleFiles($textDomain, $silent);
 
             if (!$silent) {
-                echo "\n";
+                $this->output->blankLine();
             }
         }
 
-        if (!$silent) {
-            echo str_repeat('=', 50) . "\n";
-            echo "✨ Downloaded {$totalDownloaded} translation files!\n\n";
+        if (!$silent && $start !== null) {
+            $this->output->separator();
+            $this->output->line('Downloaded ' . $totalDownloaded . ' translation file(s).');
+            $this->writeCliCompletion($start, $success);
         }
 
         return $success;
@@ -2509,7 +2607,7 @@ class Translator
             }
 
             if (!$silent) {
-                echo "    ⊘ Removed duplicate {$locale}\n";
+                $this->output->step("Removed duplicate locale file(s): {$locale}");
             }
         }
     }
@@ -2616,20 +2714,19 @@ class Translator
      */
     public function translate()
     {
+        $start = $this->writeCliBannerAndPluginContext();
         $pluginSlug = $this->getPluginSlug();
 
-        echo "\n🌍 PublishPress Translation Tool\n";
-        echo str_repeat('=', 50) . "\n\n";
-        echo "Plugin: {$pluginSlug}\n";
-        echo "Path: {$this->pluginRoot}\n";
-        echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
-
+        $this->output->phase('Run configuration');
+        $this->output->bullet('Project path: ' . $this->pluginRoot);
+        $this->output->bullet('Target languages: ' . implode(', ', $this->targetLanguages));
         if (!empty($this->skippedLanguages)) {
-            echo "Skipped: " . implode(', ', $this->skippedLanguages) . " (handled by human translators)\n";
+            $this->output->bullet('Skipped languages: ' . implode(', ', $this->skippedLanguages) . ' (human translators)');
         }
-
-        echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
-        echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
+        $this->output->bullet('Mode: ' . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION'));
+        $this->output->bullet('Weblate: ' . ($this->weblateEnabled ? 'enabled' : 'disabled'));
+        $this->output->blankLine();
+        $this->output->separator();
 
         $apiKey = $this->getApiKey();
         if (!$apiKey) {
@@ -2638,6 +2735,8 @@ class Translator
             fwrite(STDERR, "  export OPENAI_API_KEY=your-api-key-here\n\n");
 
             if (!$this->dryRun) {
+                $this->writeCliCompletion($start, false);
+
                 return false;
             }
         }
@@ -2648,25 +2747,28 @@ class Translator
 
         // Step 1: Download existing translations from Weblate (if enabled)
         if ($this->weblateEnabled && !$this->dryRun) {
-            echo "📥 Step 1: Downloading existing translations from Weblate...\n";
+            $this->output->phase('Downloading existing translations from Weblate');
             try {
-                $this->downloadFromWeblate(true); // Silent mode
-                echo "✓ Existing translations downloaded\n\n";
+                $this->downloadFromWeblate(true);
+                $this->output->step('Existing translations refreshed from Weblate');
             } catch (Exception $e) {
                 fwrite(STDERR, "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n");
             }
+            $this->output->separator();
         }
 
         $potFiles = $this->findPotFiles();
 
         if (empty($potFiles)) {
             fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
             return false;
         }
 
         // Step 2: Download translations from translate.wordpress.org
         if (!$this->dryRun) {
-            echo "📥 Step 2: Downloading translations from translate.wordpress.org...\n";
+            $this->output->phase('Merging translations from translate.wordpress.org');
             $totalWpOrgDownloaded = 0;
             foreach ($potFiles as $potFile) {
                 $potFileName = basename($potFile);
@@ -2674,14 +2776,14 @@ class Translator
                 $totalWpOrgDownloaded += $this->downloadFromWordPressOrg($textDomain);
             }
             if ($totalWpOrgDownloaded > 0) {
-                echo "✓ Merged translations from translate.wordpress.org for {$totalWpOrgDownloaded} language(s)\n\n";
+                $this->output->step("Merged translations from wordpress.org for {$totalWpOrgDownloaded} language(s)");
             } else {
-                echo "⊘ No translations found on wordpress.org\n\n";
+                $this->output->step('No translations merged from wordpress.org');
             }
         }
 
-        echo "📝 Step 3: Running AI translation with Potomatic...\n";
-        echo "POT files found: " . count($potFiles) . "\n\n";
+        $this->output->phase('Running AI translation with Potomatic');
+        $this->output->step('POT files found: ' . count($potFiles));
 
         $this->createTempDictionaryDir();
 
@@ -2690,8 +2792,9 @@ class Translator
             $potFileName = basename($potFile);
             $textDomain = str_replace('.pot', '', $potFileName);
 
-            echo "[" . ($index + 1) . "/" . count($potFiles) . "] Processing: {$potFileName}\n";
-            echo "Text domain: {$textDomain}\n";
+            $this->output->separator();
+            $this->output->step('POT ' . ($index + 1) . '/' . count($potFiles) . ': ' . $potFileName);
+            $this->output->step('Text domain: ' . $textDomain);
 
             $existingPoFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
             foreach ($existingPoFiles as $existingPoFile) {
@@ -2704,16 +2807,38 @@ class Translator
             try {
                 $command = $this->buildCommand($potFile, $textDomain);
 
-                echo "\n" . str_repeat('-', 50) . "\n";
-                echo "🤖 Running Potomatic AI Translation...\n";
-                echo "This may take several minutes depending on the number of strings.\n";
-                echo str_repeat('-', 50) . "\n\n";
+                $this->output->separator();
+                $this->output->phase('Running Potomatic AI translation');
+                $this->output->step('This may take several minutes depending on the number of strings');
+                $this->output->blankLine();
 
                 $returnCode = 0;
-                passthru($command . ' 2>&1', $returnCode);
+
+                $this->output->startBoxed();
+                $descriptorSpec = [
+                    1 => ['pipe', 'w'], // stdout
+                    2 => ['pipe', 'w'], // stderr
+                ];
+                $process = proc_open($command, $descriptorSpec, $pipes);
+                if (is_resource($process)) {
+                    while ($line = fgets($pipes[1])) {
+                        $this->output->boxedLine(rtrim($line, "\r\n"));
+                    }
+                    while ($line = fgets($pipes[2])) {
+                        $this->output->boxedLine(rtrim($line, "\r\n"));
+                    }
+                    foreach ($pipes as $pipe) {
+                        fclose($pipe);
+                    }
+                    $returnCode = proc_close($process);
+                } else {
+                    $this->output->boxedLine("Failed to execute command.");
+                    $returnCode = 1;
+                }
+                $this->output->endBoxed();
+
 
                 if ($returnCode === 0) {
-
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
                         $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
@@ -2743,12 +2868,12 @@ class Translator
                         $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
                     }
 
-                    echo "\n✅ Successfully processed {$potFileName}\n\n";
+                    $this->output->blankLine();
+                    $this->output->step('Successfully processed ' . $potFileName);
                 } else {
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
                     $success = false;
                 }
-
             } catch (Exception $e) {
                 fwrite(STDERR, "\n❌ Error: " . $e->getMessage() . "\n\n");
                 $success = false;
@@ -2757,7 +2882,7 @@ class Translator
 
         // Step 4: Upload updated translations to Weblate (if enabled)
         if ($this->weblateEnabled && !$this->dryRun && $success) {
-            echo "\n📤 Step 4: Uploading updated translations to Weblate...\n\n";
+            $this->output->phase('Uploading updated translations to Weblate');
             foreach ($potFiles as $potFile) {
                 $potFileName = basename($potFile);
                 $textDomain = str_replace('.pot', '', $potFileName);
@@ -2774,8 +2899,10 @@ class Translator
 
         $this->saveOverridesManifest();
 
-        echo str_repeat('=', 50) . "\n";
-        echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
+        $this->output->separator();
+        $this->output->blankLine();
+        $this->output->line('Translation ' . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}.");
+        $this->writeCliCompletion($start, $success);
 
         return $success;
     }
