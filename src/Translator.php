@@ -491,7 +491,7 @@ class Translator
         return "{$lang}_{$langUpper}";
     }
 
-    
+
     /**
      * Select Weblate languages for download
      *
@@ -530,7 +530,7 @@ class Translator
 
         return array_values($selectedByWpLocale);
     }
-    
+
     /**
      * Dedupe Weblate language codes
      *
@@ -1286,7 +1286,7 @@ class Translator
 
     /**
      * Repair plural entries where msgstr entries contain pipe-delimited forms.
-     * 
+     *
      * Handles cases where the AI generated malformed plurals like:
      * msgstr[0] "singular|plural"
      * msgstr[1] "plural|plural"
@@ -1343,7 +1343,7 @@ class Translator
                 // Check if ANY msgstr entry contains pipe-delimited forms
                 $hasPipedEntry = false;
                 $sourcePipeEntry = null;
-                
+
                 foreach ($msgstrEntries as $idx => $value) {
                     if (strpos($value, '|') !== false) {
                         $hasPipedEntry = true;
@@ -1357,7 +1357,7 @@ class Translator
 
                 if ($hasPipedEntry && $sourcePipeEntry !== null) {
                     $forms = array_map('trim', explode('|', $sourcePipeEntry));
-                    
+
                     $nplurals = max(count($msgstrEntries), count($forms));
 
                     for ($formIdx = 0; $formIdx < $nplurals; $formIdx++) {
@@ -1454,7 +1454,7 @@ class Translator
             }
 
             // Also try plugin-lang-domain as it might be the actual wp.org slug
-            if (isset($composer['extra']['plugin-lang-domain']) && 
+            if (isset($composer['extra']['plugin-lang-domain']) &&
                 !in_array($composer['extra']['plugin-lang-domain'], $slugs)) {
                 $slugs[] = $composer['extra']['plugin-lang-domain'];
             }
@@ -1516,7 +1516,7 @@ class Translator
         // Try each possible slug until we find translations
         $data = null;
         $wpOrgSlug = null;
-        
+
         foreach ($possibleSlugs as $index => $slug) {
             $apiUrl = 'https://api.wordpress.org/translations/plugins/1.0/';
             $apiUrl .= '?slug=' . urlencode($slug);
@@ -1749,7 +1749,7 @@ class Translator
             }
             return false;
         }
-        
+
         if (!$silent && (count($wpOrgMap) > 0)) {
             $parts = [];
             if ($filled > 0) {
@@ -1987,11 +1987,11 @@ class Translator
         }
 
         echo "\n Uploading to Weblate...\n";
-        
+
         $pluginSlug   = $this->getPluginSlug();
         $projectSlug  = $this->getWeblateProjectSlug();
         $componentSlug = $this->getWeblateComponentSlug($textDomain);
-        
+
         // Step 1: Ensure project exists
         echo "  • Checking project '{$projectSlug}'...\n";
         if (!$this->weblateClient->projectExists($projectSlug)) {
@@ -2041,10 +2041,10 @@ class Translator
 
         // Step 3: Upload PO files
         echo "  • Uploading translation files...\n";
-        
+
         // Get all PO files
         $allPoFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
-        
+
         // Filter by target languages if custom languages were specified, and always exclude skipped languages
         $poFilesToUpload = [];
         if ($this->customTargetLanguages) {
@@ -2054,12 +2054,12 @@ class Translator
                     $poFilesToUpload[] = $poFile;
                 }
             }
-            
+
             if (empty($poFilesToUpload)) {
                 echo "  ⚠️  No PO files found matching specified languages: " . implode(', ', $this->targetLanguages) . "\n";
                 return;
             }
-            
+
             echo "  • Uploading " . count($poFilesToUpload) . " language(s): " . implode(', ', $this->targetLanguages) . "\n";
         } else {
             // Filter out skipped languages from all PO files
@@ -2070,11 +2070,11 @@ class Translator
                 }
             }
         }
-        
+
         $uploadedCount = 0;
         $failedCount = 0;
         $delayBetweenUploads = (int) (getenv('WEBLATE_UPLOAD_DELAY') ?: 2);
-        
+
         foreach ($poFilesToUpload as $index => $poFile) {
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
             if (!isset($matches[1])) {
@@ -2090,7 +2090,7 @@ class Translator
 
             $uploaded = false;
             $maxRetries = 3;
-            
+
             for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
                 try {
                     $this->weblateClient->ensureTranslation($projectSlug, $componentSlug, $languageCode);
@@ -2102,7 +2102,7 @@ class Translator
                 } catch (Exception $e) {
                     $is503 = strpos($e->getMessage(), '503') !== false || strpos($e->getMessage(), 'Service Unavailable') !== false;
                     $isTlsError = strpos($e->getMessage(), 'cURL error 56') !== false || strpos($e->getMessage(), 'SSL') !== false;
-                    
+
                     if (
                         strpos($e->getMessage(), 'read-only') !== false &&
                         in_array($languageCode, ['en', 'en_US', 'en_GB'])
@@ -2113,31 +2113,31 @@ class Translator
                     }
 
                     // Check for duplicate constraint error
-                    if (strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false || 
+                    if (strpos($e->getMessage(), 'duplicate key value violates unique constraint') !== false ||
                         strpos($e->getMessage(), 'trans_unit_translation_id_id_hash') !== false) {
                         echo "      ⚠️  Duplicate entries detected, cleaning PO file...\n";
                         $this->deduplicatePoFile($poFile);
-                                        
+
                         if ($attempt < $maxRetries) {
                             echo "      🔄 Retrying upload after cleanup...\n";
                             sleep(2);
                             continue;
                         }
                     }
-                    
+
                     if (($is503 || $isTlsError) && $attempt < $maxRetries) {
                         $backoffDelay = $attempt * 10;
                         echo "    ⏳ Retrying {$languageCode} after {$backoffDelay}s (attempt {$attempt}/{$maxRetries})...\n";
                         sleep($backoffDelay);
                         continue;
                     }
-                    
+
                     fwrite(STDERR, "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n");
                     $failedCount++;
                     break;
                 }
             }
-            
+
             if ($uploaded && $index < count($poFilesToUpload) - 1 && $delayBetweenUploads > 0) {
                 sleep($delayBetweenUploads);
             }
@@ -2286,7 +2286,7 @@ class Translator
 
         return $textDomain;
     }
-    
+
     /**
      * Download translations from Weblate
      *
@@ -2332,7 +2332,7 @@ class Translator
             $potFileName = basename($potFile);
             $textDomain = str_replace('.pot', '', $potFileName);
             $componentSlug = $this->getWeblateComponentSlug($textDomain);
-            
+
             if (!$silent) {
                 echo "Component: {$componentSlug}\n";
             }
@@ -2390,10 +2390,10 @@ class Translator
                     }
 
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $componentSlug, $language);
-                    
+
                     if ($poContent) {
                         $wpLocale = $this->reverseMapWeblateLanguage($language);
-                        
+
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $wpLocale . '.po';
                         file_put_contents($poFile, $poContent);
                         chmod($poFile, 0644);
@@ -2404,7 +2404,7 @@ class Translator
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         $this->weblateClient->removeDuplicateReferences($poFile);
                         $this->weblateClient->removeDuplicateExtractedComments($poFile);
-                        
+
                         $this->revertPluginNameTranslations($poFile);
 
                         $this->applyTranslationOverrides($poFile, $wpLocale);
@@ -2623,11 +2623,11 @@ class Translator
         echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
-        
+
         if (!empty($this->skippedLanguages)) {
             echo "Skipped: " . implode(', ', $this->skippedLanguages) . " (handled by human translators)\n";
         }
-        
+
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
         echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
 
@@ -2717,12 +2717,12 @@ class Translator
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
                         $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
-                        
+
                         // Skip processing if --languages flag is set and this language is not in the target list
                         if ($this->customTargetLanguages && $poLanguage && !in_array($poLanguage, $this->targetLanguages)) {
                             continue;
                         }
-                        
+
                         if ($this->weblateClient) {
                             $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                             $this->weblateClient->removeDuplicateReferences($poFile);
@@ -2730,16 +2730,16 @@ class Translator
                         }
 
                         $this->repairPluralPipeDelimitedEntries($poFile);
-                        
+
                         // Validate no malformed entries remain
                         $this->validatePluralEntries($poFile);
-                        
+
                         $this->revertPluginNameTranslations($poFile);
 
                         if ($poLanguage) {
                             $this->applyTranslationOverrides($poFile, $poLanguage);
                         }
-                        
+
                         $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
                     }
 
@@ -2748,7 +2748,7 @@ class Translator
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
                     $success = false;
                 }
-                
+
             } catch (Exception $e) {
                 fwrite(STDERR, "\n❌ Error: " . $e->getMessage() . "\n\n");
                 $success = false;

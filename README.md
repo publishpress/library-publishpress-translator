@@ -387,12 +387,12 @@ The tool translates into these languages by default:
 - Chinese (Taiwan) (zh_TW)
 
 ### Skipped Languages
- 
+
 The following languages should not be translated by Potomatic, they are handled by human translators:
 - Italian (it_IT)
 - Spanish (es_ES)
 - French (fr_FR)
- 
+
 These languages will be skipped during translation and upload processes, even if PO files exist for them.
 
 **How Skipped Languages Work:**
