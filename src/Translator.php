@@ -9,6 +9,8 @@
 namespace PublishPress\Translations;
 
 use Exception;
+use PublishPress\Translations\Audit\AuditOptions;
+use PublishPress\Translations\Audit\Auditor;
 
 class Translator
 {
@@ -153,6 +155,13 @@ class Translator
     private $output;
 
     /**
+     * Audit CLI options
+     *
+     * @var AuditOptions
+     */
+    private $auditOptions;
+
+    /**
      * Constructor
      *
      * @param string $pluginRoot Plugin root directory
@@ -186,6 +195,8 @@ class Translator
             $this->skippedLanguages = array_merge($this->skippedLanguages, $customSkipped);
             $this->skippedLanguages = array_unique($this->skippedLanguages);
         }
+
+        $this->auditOptions = AuditOptions::defaults();
     }
 
     /**
@@ -217,6 +228,79 @@ class Translator
     {
         $this->targetLanguages = array_diff($languages, $this->skippedLanguages);
         $this->customTargetLanguages = true;
+    }
+
+    public function setAuditMode($mode)
+    {
+        $this->auditOptions = $this->auditOptions->withMode((string) $mode);
+    }
+
+    /**
+     * @param float $usd
+     */
+    public function setAuditMaxCost($usd)
+    {
+        $this->auditOptions = $this->auditOptions->withMaxCost((float) $usd);
+    }
+
+    /**
+     * @param array $checks CheckId values
+     */
+    public function setAuditOnly(array $checks)
+    {
+        $this->auditOptions = $this->auditOptions->withOnly($checks);
+    }
+
+    /**
+     * @param bool $strict
+     */
+    public function setAuditStrictPo($strict)
+    {
+        $this->auditOptions = $this->auditOptions->withStrictPo((bool) $strict);
+    }
+
+    /**
+     * Run translation audit checks (CLI --audit).
+     *
+     * @return bool
+     */
+    public function audit()
+    {
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Auditing translations');
+
+        $resolved = $this->auditOptions->resolveForRuntime();
+        if ($this->auditOptions->isInteractive() && $resolved->isReportOnly()) {
+            $this->output->warning(
+                'Non-interactive stdin or CI detected — audit mode forced to report (no prompts).'
+            );
+        }
+
+        $name = $this->getPluginNameForExclusion();
+        if ($name === null || $name === '') {
+            $name = $this->getPluginSlug();
+        }
+
+        try {
+            $ok = (new Auditor(
+                $this->pluginRoot,
+                $this->languagesDir,
+                $this->targetLanguages,
+                $this->output,
+                $this->getApiKey(),
+                $this->getPluginVersion(),
+                (string) $name,
+                $resolved
+            ))->run();
+            $this->writeCliCompletion($start, $ok);
+
+            return $ok;
+        } catch (\Throwable $e) {
+            fwrite(STDERR, 'Audit error: ' . $e->getMessage() . "\n");
+            $this->writeCliCompletion($start, false);
+
+            return false;
+        }
     }
 
     /**

@@ -149,6 +149,11 @@ $options = getopt('', [
     'repair-plurals',
     'clean-po',
     'sync-files',
+    'audit',
+    'audit-mode:',
+    'audit-max-cost:',
+    'audit-only:',
+    'audit-strict-po',
     'help',
 ]);
 
@@ -172,6 +177,11 @@ Options:
   --repair-plurals       Repair malformed plural entries in existing .po files
   --clean-po             Clean duplicate entries from all .po files
   --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
+  --audit                Audit translations (diff worthiness, empty/fuzzy, POT mismatch, header version)
+  --audit-mode=MODE      interactive (default) | allow-edit | report
+  --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
+  --audit-only=LIST      Comma-separated: text,empty,pot,version (default: all)
+  --audit-strict-po      Try StrictPoLoader first (falls back to lenient on failure)
   --help                 Show this help message
 
 Examples:
@@ -184,6 +194,9 @@ Examples:
   publishpress-translate --repair-plurals          # Fix malformed plural entries in .po files
   publishpress-translate --clean-po                # Remove duplicate entries from .po files
   publishpress-translate --sync-files              # Check if translated files are up-to-date
+  publishpress-translate --audit                   # Run all audit checks
+  publishpress-translate --audit --audit-mode=report
+  publishpress-translate --audit --audit-only=text,empty --languages=de_DE
 
 Environment Variables:
   OPENAI_API_KEY               Required for AI translations (not needed for --dry-run or --download)
@@ -230,12 +243,31 @@ try {
         $translator->setTargetLanguages($languages);
     }
 
+    if (isset($options['audit-mode'])) {
+        $translator->setAuditMode((string) $options['audit-mode']);
+    }
+
+    if (isset($options['audit-max-cost'])) {
+        $translator->setAuditMaxCost((float) $options['audit-max-cost']);
+    }
+
+    if (isset($options['audit-only'])) {
+        $only = array_map('trim', explode(',', (string) $options['audit-only']));
+        $only = array_filter($only);
+        $translator->setAuditOnly($only);
+    }
+
+    if (isset($options['audit-strict-po'])) {
+        $translator->setAuditStrictPo(true);
+    }
+
     $modeMap = [
         'repair-plurals' => 'repairPluralEntries',
         'clean-po'       => 'cleanPoFiles',
         'sync-files'     => 'syncPoAndMoFiles',
         'download'       => 'downloadFromWeblate',
         'upload'         => 'uploadToWeblate',
+        'audit'          => 'audit',
     ];
 
     $result = null;
@@ -251,7 +283,7 @@ try {
     }
 
     exit($result ? 0 : 1);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     cliError("Error: " . $e->getMessage());
     exit(1);
 }
