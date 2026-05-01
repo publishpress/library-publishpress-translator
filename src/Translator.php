@@ -850,7 +850,7 @@ class Translator
         }
 
         $flat = [];
-        foreach ($data as $group => $entries) {
+        foreach ($data as $entries) {
             if (!is_array($entries)) {
                 continue;
             }
@@ -1603,7 +1603,6 @@ class Translator
 
         // Try each possible slug until we find translations
         $data = null;
-        $wpOrgSlug = null;
 
         foreach ($possibleSlugs as $index => $slug) {
             $apiUrl = 'https://api.wordpress.org/translations/plugins/1.0/';
@@ -1625,7 +1624,6 @@ class Translator
                 $decoded = json_decode($response, true);
                 if (is_array($decoded) && isset($decoded['translations']) && !empty($decoded['translations'])) {
                     $data = $decoded;
-                    $wpOrgSlug = $slug;
                     break;
                 }
             }
