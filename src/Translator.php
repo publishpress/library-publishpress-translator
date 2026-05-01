@@ -9,6 +9,9 @@
 namespace PublishPress\Translations;
 
 use Exception;
+use PublishPress\Translations\Audit\AuditOptions;
+use PublishPress\Translations\Audit\Auditor;
+use PublishPress\Translations\Support\TranslationOverrides;
 
 class Translator
 {
@@ -153,6 +156,13 @@ class Translator
     private $output;
 
     /**
+     * Audit CLI options
+     *
+     * @var AuditOptions
+     */
+    private $auditOptions;
+
+    /**
      * Constructor
      *
      * @param string $pluginRoot Plugin root directory
@@ -186,6 +196,8 @@ class Translator
             $this->skippedLanguages = array_merge($this->skippedLanguages, $customSkipped);
             $this->skippedLanguages = array_unique($this->skippedLanguages);
         }
+
+        $this->auditOptions = AuditOptions::defaults();
     }
 
     /**
@@ -217,6 +229,95 @@ class Translator
     {
         $this->targetLanguages = array_diff($languages, $this->skippedLanguages);
         $this->customTargetLanguages = true;
+    }
+
+    public function setAuditMode($mode)
+    {
+        $this->auditOptions = $this->auditOptions->withMode((string) $mode);
+    }
+
+    /**
+     * @param float $usd
+     */
+    public function setAuditMaxCost($usd)
+    {
+        $this->auditOptions = $this->auditOptions->withMaxCost((float) $usd);
+    }
+
+    /**
+     * @param array $checks CheckId values
+     */
+    public function setAuditOnly(array $checks)
+    {
+        $this->auditOptions = $this->auditOptions->withOnly($checks);
+    }
+
+    /**
+     * @param bool $strict
+     */
+    public function setAuditStrictPo($strict)
+    {
+        $this->auditOptions = $this->auditOptions->withStrictPo((bool) $strict);
+    }
+
+    /**
+     * @param string[] $formats Raw tokens (e.g. from comma-split CLI); see AuditReportFormat
+     */
+    public function setAuditReportFormats(array $formats)
+    {
+        $this->auditOptions = $this->auditOptions->withReportFormats($formats);
+    }
+
+    /**
+     * @param string|null $dir Absolute or relative directory for audit report files
+     */
+    public function setAuditReportDir($dir)
+    {
+        $this->auditOptions = $this->auditOptions->withReportDir($dir !== null ? (string) $dir : null);
+    }
+
+    /**
+     * Run translation audit checks (CLI --audit).
+     *
+     * @return bool
+     */
+    public function audit()
+    {
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Auditing translations');
+
+        $resolved = $this->auditOptions->resolveForRuntime();
+        if ($this->auditOptions->isInteractive() && $resolved->isReportOnly()) {
+            $this->output->warning(
+                'Non-interactive stdin or CI detected — audit mode forced to report (no prompts).'
+            );
+        }
+
+        $name = $this->getPluginNameForExclusion();
+        if ($name === null || $name === '') {
+            $name = $this->getPluginSlug();
+        }
+
+        try {
+            $ok = (new Auditor(
+                $this->pluginRoot,
+                $this->languagesDir,
+                $this->targetLanguages,
+                $this->output,
+                $this->getApiKey(),
+                $this->getPluginVersion(),
+                (string) $name,
+                $resolved
+            ))->run();
+            $this->writeCliCompletion($start, $ok);
+
+            return $ok;
+        } catch (\Throwable $e) {
+            fwrite(STDERR, 'Audit error: ' . $e->getMessage() . "\n");
+            $this->writeCliCompletion($start, false);
+
+            return false;
+        }
     }
 
     /**
@@ -865,41 +966,6 @@ class Translator
     }
 
     /**
-     * Parse a TRANSLATION_OVERRIDES env var value into a flat override map.
-     *
-     * @param string $envValue Raw env var value
-     * @return array Override map
-     */
-    private function parseTranslationOverridesEnv($envValue)
-    {
-        $overrides = [];
-
-        if (!is_string($envValue) || trim($envValue) === '') {
-            return $overrides;
-        }
-
-        $entries = array_filter(array_map('trim', explode(',', $envValue)));
-
-        foreach ($entries as $entry) {
-            $equalsIndex = strpos($entry, '=');
-            if ($equalsIndex !== false && $equalsIndex > 0) {
-                $source = trim(substr($entry, 0, $equalsIndex));
-                $target = trim(substr($entry, $equalsIndex + 1));
-                if ($source !== '' && $target !== '') {
-                    $overrides[$source] = $target;
-                }
-            } else {
-                $word = trim($entry);
-                if ($word !== '') {
-                    $overrides[$word] = $word;
-                }
-            }
-        }
-
-        return $overrides;
-    }
-
-    /**
      * Build the translation overrides for all target languages.
      *
      * @return array Two keys
@@ -910,7 +976,7 @@ class Translator
 
         $envGlobal = getenv('TRANSLATION_OVERRIDES');
         if ($envGlobal !== false && trim($envGlobal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            $parsed = TranslationOverrides::parseEnvValue($envGlobal);
             foreach ($parsed as $source => $target) {
                 $global[$source] = $target;
             }
@@ -921,7 +987,7 @@ class Translator
             $envKey = 'TRANSLATION_OVERRIDES_' . $lang;
             $envVal = getenv($envKey);
             if ($envVal !== false && trim($envVal) !== '') {
-                $perLanguage[$lang] = $this->parseTranslationOverridesEnv($envVal);
+                $perLanguage[$lang] = TranslationOverrides::parseEnvValue($envVal);
             }
         }
 
@@ -1011,26 +1077,7 @@ class Translator
      */
     private function getOverridesForLanguage($language)
     {
-        $overrides = [];
-
-        $envGlobal = getenv('TRANSLATION_OVERRIDES');
-        if ($envGlobal !== false && trim($envGlobal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
-            foreach ($parsed as $source => $target) {
-                $overrides[$source] = $target;
-            }
-        }
-
-        $envKey = 'TRANSLATION_OVERRIDES_' . $language;
-        $envVal = getenv($envKey);
-        if ($envVal !== false && trim($envVal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envVal);
-            foreach ($parsed as $source => $target) {
-                $overrides[$source] = $target;
-            }
-        }
-
-        return $overrides;
+        return TranslationOverrides::mapForLanguage($language);
     }
 
     /**
@@ -2834,7 +2881,6 @@ class Translator
                     $returnCode = 1;
                 }
                 $this->output->endBoxed();
-
 
                 if ($returnCode === 0) {
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");

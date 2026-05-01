@@ -1,0 +1,531 @@
+<?php
+
+/**
+ * Git diff + AI worthiness + optional revert (surgical splice).
+ *
+ * @package PublishPress\Translations\Audit\Checks
+ */
+
+namespace PublishPress\Translations\Audit\Checks;
+
+use PublishPress\Translations\Audit\AuditCheckInterface;
+use PublishPress\Translations\Audit\AuditContext;
+use PublishPress\Translations\Audit\AuditFinding;
+use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
+use PublishPress\Translations\Audit\Support\AiWorthinessJudge;
+use PublishPress\Translations\Audit\Support\DiffPrefilter;
+use PublishPress\Translations\Audit\Support\GitDiff;
+use PublishPress\Translations\Audit\Support\InteractivePrompt;
+use PublishPress\Translations\Audit\Support\PoEntrySplicer;
+use PublishPress\Translations\Audit\Support\PoFile;
+
+final class TextChangeCheck implements AuditCheckInterface
+{
+    public function id(): string
+    {
+        return CheckId::TEXT_CHANGE;
+    }
+
+    public function title(): string
+    {
+        return 'Text-change worthiness (git diff vs HEAD)';
+    }
+
+    public function run(AuditContext $ctx): array
+    {
+        $findings = [];
+        $git      = new GitDiff($ctx->pluginRoot());
+
+        if (!GitDiff::isAvailable($ctx->pluginRoot())) {
+            $findings[] = new AuditFinding(
+                $this->id(),
+                'info',
+                '',
+                '',
+                'Git not available or not a repository — skipping diff worthiness check.',
+                null,
+                null,
+                null,
+                null,
+                null,
+                IssueSlug::TEXT_CHANGE_NO_GIT
+            );
+
+            return $findings;
+        }
+
+        $relPaths = $git->changedPoFiles($ctx->gitBase());
+        $langs    = $ctx->targetLanguages();
+        if ($langs !== []) {
+            $relPaths = array_values(
+                array_filter(
+                    $relPaths,
+                    static function ($p) use ($langs) {
+                        foreach ($langs as $lang) {
+                            if (substr($p, -strlen($lang . '.po')) === $lang . '.po') {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    }
+                )
+            );
+        }
+
+        if ($relPaths === []) {
+            $findings[] = new AuditFinding(
+                $this->id(),
+                'info',
+                '',
+                '',
+                'No changed .po files in languages/ for this audit scope.',
+                null,
+                null,
+                null,
+                null,
+                null,
+                IssueSlug::TEXT_CHANGE_NO_CHANGED_PO
+            );
+
+            return $findings;
+        }
+
+        $strict  = $ctx->options()->strictPo();
+        $judge   = new AiWorthinessJudge();
+        $prompt  = new InteractivePrompt();
+        $maxCost = $ctx->options()->maxCostUsd();
+        $apiKey  = $ctx->apiKey();
+
+        foreach ($relPaths as $rel) {
+            $full = $ctx->pluginRoot() . '/' . $rel;
+            if (!is_file($full)) {
+                continue;
+            }
+
+            $locale  = self::localeFromPoPath($rel);
+            $headRaw = $git->fileAtRef($rel, $ctx->gitBase());
+            if ($headRaw === null) {
+                $findings[] = new AuditFinding(
+                    $this->id(),
+                    'warning',
+                    $rel,
+                    $locale,
+                    'File missing at ' . $ctx->gitBase() . ' (new file?) — cannot diff against HEAD.',
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    IssueSlug::TEXT_CHANGE_MISSING_AT_BASE
+                );
+                continue;
+            }
+
+            try {
+                $headPo = PoFile::fromString($headRaw, $strict);
+                $workPo = PoFile::fromFile($full, $strict);
+            } catch (\Throwable $e) {
+                $findings[] = new AuditFinding(
+                    $this->id(),
+                    'warning',
+                    $rel,
+                    $locale,
+                    'Parse error: ' . $e->getMessage(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    IssueSlug::PO_PARSE_ERROR
+                );
+                continue;
+            }
+
+            $w = $workPo->parseWarning();
+            if ($w !== null) {
+                $findings[] = new AuditFinding(
+                    $this->id(),
+                    'warning',
+                    $rel,
+                    $locale,
+                    $w,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    IssueSlug::PO_PARSE_WARNING
+                );
+            }
+
+            $changes = self::collectChangedEntries($headPo, $workPo);
+            if ($changes === []) {
+                continue;
+            }
+
+            $prompt->resetAcceptAll();
+            $batchSize = 20;
+            $pending   = [];
+
+            foreach ($changes as $chg) {
+                $id = $chg['id'];
+                if (DiffPrefilter::isCosmeticOnly($chg['old'], $chg['new'])) {
+                    $f = self::applyOne($ctx, $prompt, $full, $rel, $locale, $chg, false, 'pre-filter: cosmetic only');
+                    $findings[] = $f;
+                    if ($f->actionTaken === 'quit') {
+                        return $findings;
+                    }
+                    continue;
+                }
+
+                $pending[$id] = [
+                    'msgid' => $chg['msgid'],
+                    'old'   => $chg['old'],
+                    'new'   => $chg['new'],
+                    '_chg'  => $chg,
+                ];
+
+                if (count($pending) >= $batchSize) {
+                    $quit = self::flushAiBatch(
+                        $ctx,
+                        $prompt,
+                        $findings,
+                        $judge,
+                        $apiKey,
+                        $locale,
+                        $full,
+                        $rel,
+                        $pending,
+                        $maxCost
+                    );
+                    if ($quit) {
+                        return $findings;
+                    }
+                    $pending = [];
+                }
+            }
+
+            if ($pending !== []) {
+                $quit = self::flushAiBatch(
+                    $ctx,
+                    $prompt,
+                    $findings,
+                    $judge,
+                    $apiKey,
+                    $locale,
+                    $full,
+                    $rel,
+                    $pending,
+                    $maxCost
+                );
+                if ($quit) {
+                    return $findings;
+                }
+            }
+        }
+
+        return $findings;
+    }
+
+    /**
+     * @param array<int,AuditFinding>                                                           $findings
+     * @param array<string,array{msgid:string,old:string,new:string,_chg:array<string,mixed>}> $pending
+     * @return bool true if user quit mid-check
+     */
+    private static function flushAiBatch(
+        AuditContext $ctx,
+        InteractivePrompt $prompt,
+        array &$findings,
+        AiWorthinessJudge $judge,
+        ?string $apiKey,
+        string $locale,
+        string $fullPath,
+        string $relPath,
+        array &$pending,
+        float $maxCost
+    ): bool {
+        if ($pending === []) {
+            return false;
+        }
+
+        if ($apiKey === null || $apiKey === '') {
+            foreach ($pending as $row) {
+                $chg        = $row['_chg'];
+                $findings[] = new AuditFinding(
+                    CheckId::TEXT_CHANGE,
+                    'warning',
+                    $relPath,
+                    $locale,
+                    'OPENAI_API_KEY missing — cannot judge change for msgid: ' . $chg['msgid'],
+                    $row['old'],
+                    $row['new'],
+                    'unjudged (no API key)',
+                    self::translationDiffReportLines($chg),
+                    'OPENAI_API_KEY missing — cannot judge translation change',
+                    IssueSlug::TRANSLATION_AI_UNJUDGED
+                );
+            }
+            $pending = [];
+
+            return false;
+        }
+
+        if ($judge->cumulativeCostUsd() >= $maxCost) {
+            foreach ($pending as $row) {
+                $chg        = $row['_chg'];
+                $findings[] = new AuditFinding(
+                    CheckId::TEXT_CHANGE,
+                    'warning',
+                    $relPath,
+                    $locale,
+                    'Cost cap reached — not judged: ' . $chg['msgid'],
+                    $row['old'],
+                    $row['new'],
+                    'unjudged (cost cap)',
+                    self::translationDiffReportLines($chg),
+                    'Cost cap reached — not judged',
+                    IssueSlug::TRANSLATION_AI_COST_CAP
+                );
+            }
+            $pending = [];
+
+            return false;
+        }
+
+        $batch = [];
+        foreach ($pending as $id => $row) {
+            $batch[$id] = [
+                'msgid' => $row['msgid'],
+                'old'   => $row['old'],
+                'new'   => $row['new'],
+            ];
+        }
+
+        $judged = $judge->judgeCached($apiKey, $locale, $batch);
+
+        foreach ($pending as $id => $row) {
+            $chg    = $row['_chg'];
+            $result = $judged[$id] ?? ['worthy' => true, 'reason' => 'default'];
+            $worthy = (bool) $result['worthy'];
+            $reason = (string) $result['reason'];
+
+            $f = self::applyOne($ctx, $prompt, $fullPath, $relPath, $locale, $chg, $worthy, $reason);
+            $findings[] = $f;
+            if ($f->actionTaken === 'quit') {
+                $pending = [];
+
+                return true;
+            }
+        }
+
+        $pending = [];
+
+        return false;
+    }
+
+    /**
+     * @param array<string,mixed> $chg
+     *
+     * @return string[]
+     */
+    private static function translationDiffReportLines(array $chg): array
+    {
+        return [
+            'msgid: ' . $chg['msgid'],
+            '--- msgstr (previous) ---',
+            (string) $chg['old'],
+            '--- msgstr (current) ---',
+            (string) $chg['new'],
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $chg
+     */
+    private static function applyOne(
+        AuditContext $ctx,
+        InteractivePrompt $prompt,
+        string $fullPath,
+        string $relPath,
+        string $locale,
+        array $chg,
+        bool $worthy,
+        string $reason
+    ): AuditFinding {
+        if ($worthy) {
+            $msg = 'Worthy: ' . $reason;
+
+            return new AuditFinding(
+                CheckId::TEXT_CHANGE,
+                'info',
+                $relPath,
+                $locale,
+                $msg,
+                $chg['old'],
+                $chg['new'],
+                'kept',
+                self::translationDiffReportLines($chg),
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_WORTHY
+            );
+        }
+
+        if ($ctx->isReportOnly()) {
+            $msg = 'Not worth keeping: ' . $reason;
+
+            return new AuditFinding(
+                CheckId::TEXT_CHANGE,
+                'warning',
+                $relPath,
+                $locale,
+                $msg,
+                $chg['old'],
+                $chg['new'],
+                'none (report mode)',
+                self::translationDiffReportLines($chg),
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_NOT_WORTHY
+            );
+        }
+
+        $doRevert = $ctx->isAllowEdit();
+        if ($ctx->isInteractive()) {
+            $act = $prompt->askDiffAction(
+                "Not worth keeping ({$relPath} / {$locale}): {$reason}\nmsgid: " . self::shorten($chg['msgid'])
+            );
+            if ($act === 'view') {
+                $ctx->output()->line('--- old msgstr ---');
+                $ctx->output()->line($chg['old']);
+                $ctx->output()->line('--- new msgstr ---');
+                $ctx->output()->line($chg['new']);
+                $act = $prompt->askDiffAction('Action?');
+            }
+            if ($act === 'quit') {
+                $msg = 'User quit check: ' . $reason;
+
+                return new AuditFinding(
+                    CheckId::TEXT_CHANGE,
+                    'warning',
+                    $relPath,
+                    $locale,
+                    $msg,
+                    $chg['old'],
+                    $chg['new'],
+                    'quit',
+                    self::translationDiffReportLines($chg),
+                    $msg,
+                    IssueSlug::TRANSLATION_CHANGE_QUIT
+                );
+            }
+            $doRevert = $act === 'revert';
+        }
+
+        if (!$doRevert) {
+            $msg = 'Kept after review: ' . $reason;
+
+            return new AuditFinding(
+                CheckId::TEXT_CHANGE,
+                'info',
+                $relPath,
+                $locale,
+                $msg,
+                $chg['old'],
+                $chg['new'],
+                'kept',
+                self::translationDiffReportLines($chg),
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_KEPT
+            );
+        }
+
+        try {
+            PoEntrySplicer::replaceEntryTranslations(
+                $fullPath,
+                $chg['context'],
+                $chg['msgid'],
+                $chg['plural'],
+                $chg['revertSingular'],
+                $chg['revertPluralRest']
+            );
+            $action = 'reverted';
+        } catch (\Throwable $e) {
+            $action = 'revert failed: ' . $e->getMessage();
+        }
+
+        $msg = 'Not worth keeping: ' . $reason;
+
+        $issue = $action === 'reverted'
+            ? IssueSlug::TRANSLATION_CHANGE_REVERTED
+            : IssueSlug::TRANSLATION_CHANGE_REVERT_FAILED;
+
+        return new AuditFinding(
+            CheckId::TEXT_CHANGE,
+            'warning',
+            $relPath,
+            $locale,
+            $msg,
+            $chg['old'],
+            $chg['new'],
+            $action,
+            self::translationDiffReportLines($chg),
+            $msg,
+            $issue
+        );
+    }
+
+    private static function shorten(string $s): string
+    {
+        if (strlen($s) <= 120) {
+            return $s;
+        }
+
+        return substr($s, 0, 117) . '...';
+    }
+
+    private static function localeFromPoPath(string $rel): string
+    {
+        $base = basename($rel, '.po');
+        $p    = strrpos($base, '-');
+        if ($p === false) {
+            return $base;
+        }
+
+        return substr($base, $p + 1);
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private static function collectChangedEntries(PoFile $headPo, PoFile $workPo): array
+    {
+        $out = [];
+        $i   = 0;
+
+        foreach ($workPo->activeTranslations() as $wt) {
+            $ht = $headPo->find($wt->getContext(), $wt->getOriginal());
+            $old = $ht === null ? '' : PoFile::serializeTranslation($ht);
+            $new = PoFile::serializeTranslation($wt);
+            if ($old === $new) {
+                continue;
+            }
+
+            $revertSingular   = $ht === null ? '' : (string) $ht->getTranslation();
+            $revertPluralRest = $ht === null ? [] : array_values($ht->getPluralTranslations());
+
+            $out[] = [
+                'id'               => 'c' . $i++,
+                'context'          => $wt->getContext(),
+                'msgid'            => $wt->getOriginal(),
+                'plural'           => $wt->getPlural(),
+                'old'              => $old,
+                'new'              => $new,
+                'revertSingular'   => $revertSingular,
+                'revertPluralRest' => $revertPluralRest,
+            ];
+        }
+
+        return $out;
+    }
+}
