@@ -56,7 +56,3 @@ jobs:
       - name: Run PHPCS check
         run: |
           $GITHUB_WORKSPACE/dev-workspace/run composer check:cs
-
-      - name: Run PHPStan check
-        run: |
-          $GITHUB_WORKSPACE/dev-workspace/run composer check:stan

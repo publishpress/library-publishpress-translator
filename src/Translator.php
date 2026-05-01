@@ -2882,7 +2882,6 @@ class Translator
                 }
                 $this->output->endBoxed();
 
-
                 if ($returnCode === 0) {
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {

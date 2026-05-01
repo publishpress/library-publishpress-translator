@@ -120,8 +120,10 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, '"code":"unique"') !== false &&
-                strpos($errorBody, '"attr":"slug"') !== false) {
+            if (
+                strpos($errorBody, '"code":"unique"') !== false
+                && strpos($errorBody, '"attr":"slug"') !== false
+            ) {
                 return [
                     'slug' => $projectSlug,
                     'name' => $projectName,
@@ -257,11 +259,8 @@ class WeblateClient
                             $pushUrl = '';
                         }
                     }
-
                 } else {
-
                     if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
-
                         if (
                             $repoType === 'ssh'
                             && preg_match('#^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#', $gitRepoSlug, $matches)
@@ -274,7 +273,6 @@ class WeblateClient
                             $repoUrl = $gitRepoSlug;
                             $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
                         }
-
                     } else {
                         $repoSlug = $gitRepoSlug ?: $componentSlug;
 
@@ -307,9 +305,10 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, 'requires authentication') !== false ||
-                strpos($errorBody, '"attr":"repo"') !== false) {
-
+            if (
+                strpos($errorBody, 'requires authentication') !== false
+                || strpos($errorBody, '"attr":"repo"') !== false
+            ) {
                 if ($skipVcs) {
                     throw new Exception("Error creating component with local VCS: " . $e->getMessage() . "\n" . $errorBody);
                 }
@@ -531,7 +530,6 @@ class WeblateClient
         }
 
         $regionUpper = strtoupper($region);
-        $regionLower = strtolower($region);
         $langUpper = strtoupper($lang);
 
         if ($regionUpper === $langUpper) {
@@ -588,7 +586,9 @@ class WeblateClient
 
                         while ($i < count($lines)) {
                             $i++;
-                            if ($i >= count($lines)) break;
+                            if ($i >= count($lines)) {
+                                break;
+                            }
 
                             $nextLine = trim($lines[$i]);
 
@@ -660,7 +660,6 @@ class WeblateClient
         $lines = explode("\n", $content);
         $cleanedLines = [];
         $seenReferences = [];
-        $inEntry = false;
 
         foreach ($lines as $line) {
             $trimmed = trim($line);
@@ -831,7 +830,6 @@ class WeblateClient
                 );
 
                 return $response->getStatusCode() === 200;
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -958,7 +956,6 @@ class WeblateClient
         $normalizedLanguage = str_replace('-', '_', $languageCode);
         $cleanHeaders = [];
         foreach ($headers as $h) {
-
             if (stripos($h, 'Plural-Forms:') === 0) {
                 continue;
             }
@@ -1088,7 +1085,6 @@ class WeblateClient
                 );
 
                 return $response->getBody()->getContents();
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
