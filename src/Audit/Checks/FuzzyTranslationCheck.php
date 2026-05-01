@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Empty msgstr counts per locale .po (read-only). Fuzzy entries are reported by FuzzyTranslationCheck.
+ * Fuzzy-flagged entries per locale .po (read-only).
  *
  * @package PublishPress\Translations\Audit\Checks
  */
@@ -14,16 +14,16 @@ use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
 use PublishPress\Translations\Audit\Support\PoFile;
 
-final class EmptyTranslationCheck implements AuditCheckInterface
+final class FuzzyTranslationCheck implements AuditCheckInterface
 {
     public function id(): string
     {
-        return CheckId::EMPTY_TRANSLATION;
+        return CheckId::FUZZY_TRANSLATION;
     }
 
     public function title(): string
     {
-        return 'Empty translations (.po)';
+        return 'Fuzzy translations (.po)';
     }
 
     public function run(AuditContext $ctx): array
@@ -34,7 +34,7 @@ final class EmptyTranslationCheck implements AuditCheckInterface
 
         foreach ($ctx->targetLanguages() as $locale) {
             $pattern = $dir . '/*-' . $locale . '.po';
-            $files     = glob($pattern) ?: [];
+            $files   = glob($pattern) ?: [];
             foreach ($files as $file) {
                 $rel = ltrim(str_replace($ctx->pluginRoot(), '', $file), '/\\');
                 try {
@@ -58,20 +58,20 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                     $findings[] = new AuditFinding($this->id(), 'warning', $rel, $locale, $w, null, null, null);
                 }
 
-                $empty = $po->untranslatedEntries();
-                if ($empty === []) {
+                $fuzzy = $po->fuzzyEntries();
+                if ($fuzzy === []) {
                     continue;
                 }
 
-                $sampleEmpty = self::sampleMsgids($empty, 8);
-                $msg         = sprintf('empty=%d', count($empty));
-                if ($sampleEmpty !== '') {
-                    $msg .= ' | empty msgid sample: ' . $sampleEmpty;
+                $sampleFuzzy = self::sampleMsgids($fuzzy, 8);
+                $msg         = sprintf('fuzzy=%d', count($fuzzy));
+                if ($sampleFuzzy !== '') {
+                    $msg .= ' | fuzzy msgid sample: ' . $sampleFuzzy;
                 }
 
                 $findings[] = new AuditFinding(
                     $this->id(),
-                    'warning',
+                    'info',
                     $rel,
                     $locale,
                     $msg,

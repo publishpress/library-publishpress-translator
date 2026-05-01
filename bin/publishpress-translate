@@ -177,10 +177,10 @@ Options:
   --repair-plurals       Repair malformed plural entries in existing .po files
   --clean-po             Clean duplicate entries from all .po files
   --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
-  --audit                Audit translations (diff worthiness, empty/fuzzy, POT mismatch, header version)
+  --audit                Audit translations (diff worthiness, empty, fuzzy, POT mismatch, header version)
   --audit-mode=MODE      interactive (default) | allow-edit | report
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
-  --audit-only=LIST      Comma-separated: text,empty,pot,version (default: all)
+  --audit-only=LIST      Comma-separated: text,empty,fuzzy,pot,version (default: all)
   --audit-strict-po      Reserved (strict parse needs gettext v5; wp-cli uses gettext v4)
   --help                 Show this help message
 

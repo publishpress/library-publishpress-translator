@@ -14,6 +14,8 @@ final class CheckId
 
     public const EMPTY_TRANSLATION = 'empty';
 
+    public const FUZZY_TRANSLATION = 'fuzzy';
+
     public const POT_MISMATCH = 'pot';
 
     public const PO_VERSION = 'version';
@@ -26,6 +28,7 @@ final class CheckId
         return [
             self::TEXT_CHANGE,
             self::EMPTY_TRANSLATION,
+            self::FUZZY_TRANSLATION,
             self::POT_MISMATCH,
             self::PO_VERSION,
         ];
