@@ -1,6 +1,7 @@
 path:
   - src
   - bin
+  - scripts
 jobs: 10
 extensions:
   - php

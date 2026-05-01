@@ -80,7 +80,6 @@ if ($returnCode === 0) {
     $output->blankLine();
     $output->success("Potomatic setup complete!");
     $output->blankLine();
-
 } else {
     $output->error("Failed to install Potomatic dependencies");
     exit(6);
