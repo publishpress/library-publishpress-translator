@@ -1175,5 +1175,4 @@ class WeblateClient
             throw new Exception("Error getting component languages: " . $e->getMessage());
         }
     }
-
 }

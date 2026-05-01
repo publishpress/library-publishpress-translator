@@ -208,6 +208,8 @@ Examples:
 
 Environment Variables:
   OPENAI_API_KEY               Required for AI translations (not needed for --dry-run or --download)
+  PLUGIN_AI_CONTEXT            Optional; translation audit text check only — short plugin
+                               blurb sent to the AI worthiness judge (omit if unset)
   WEBLATE_API_TOKEN            Required for Weblate integration (upload/download)
   TRANSLATION_OVERRIDES        Comma-separated overrides/exclusions (all languages)
                                Formats: "word" (exclude) or "word=Target" (custom form)

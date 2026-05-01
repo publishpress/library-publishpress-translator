@@ -3,6 +3,9 @@
 /**
  * Batched OpenAI judge for whether a .po msgstr change is worth keeping.
  *
+ * Optional env `PLUGIN_AI_CONTEXT`: short maintainer description of the
+ * plugin under audit. When set, sent as `plugin_context` in the user JSON; omitted when unset.
+ *
  * @package PublishPress\Translations\Audit\Support
  */
 
@@ -13,6 +16,12 @@ use GuzzleHttp\Exception\GuzzleException;
 
 final class AiWorthinessJudge
 {
+    /** Maintainer-supplied blurb for the plugin under audit (optional). */
+    private const ENV_AI_PLUGIN_CONTEXT = 'PLUGIN_AI_CONTEXT';
+
+    /** Cap env value size (bytes) before send + cache fingerprint. */
+    private const AI_PLUGIN_CONTEXT_MAX_BYTES = 4000;
+
     private const MODEL = 'gpt-4o-mini';
 
     /** USD per 1M tokens (approx list price; cap is still a safety rail). */
@@ -62,13 +71,26 @@ final class AiWorthinessJudge
             ];
         }
 
-        $userPayload = json_encode(
-            [
-                'locale'  => $language,
-                'changes' => $items,
-            ],
-            JSON_UNESCAPED_UNICODE
-        );
+        $userBody = [
+            'locale'  => $language,
+            'changes' => $items,
+        ];
+        $pluginContext = self::pluginContextFromEnv();
+        if ($pluginContext !== null) {
+            $userBody['plugin_context'] = $pluginContext;
+        }
+
+        $userPayload = json_encode($userBody, JSON_UNESCAPED_UNICODE);
+
+        // The prompt is highly compressed using Caveman skill formatting to minimize token usage and optimize API efficiency.
+        $systemContent = 'PublishPress = WordPress publishing plugins (editorial, scheduling, permissions, revisions, authors, blocks, capabilities, checklists, series, statuses, shortlinks). '
+            . 'Task: judge gettext .po msgstr edits for these products. '
+            . 'ONLY valid JSON: {"judgments":[{"id":"...","worthy":true|false,"reason":"short"}]}. '
+            . 'worthy=true: real improvement—grammar/meaning/terminology/error vs old for msgid in locale; clearer WP/publishing wording OK. '
+            . 'worthy=false: cosmetic only (spacing, punctuation, trivial synonym). Unsure → worthy=true.';
+        if ($pluginContext !== null) {
+            $systemContent .= ' plugin_context in user JSON = maintainer blurb—weigh terms + domain fit.';
+        }
 
         $payload = [
             'model'       => self::MODEL,
@@ -76,10 +98,7 @@ final class AiWorthinessJudge
             'messages'    => [
                 [
                     'role'    => 'system',
-                    'content' => 'You judge gettext translation edits. Return ONLY valid JSON: {"judgments":[{"id":"...","worthy":true|false,"reason":"short"}]}. '
-                        . 'worthy=true if the new text clearly improves grammar, meaning, terminology, or fixes an error vs the old translation for the given source msgid in the target locale. '
-                        . 'worthy=false for cosmetic-only changes (spacing, punctuation, trivial synonym with same meaning). '
-                        . 'If unsure, pick worthy=true.',
+                    'content' => $systemContent,
                 ],
                 [
                     'role'    => 'user',
@@ -155,11 +174,12 @@ final class AiWorthinessJudge
      */
     public function judgeCached(string $apiKey, string $language, array $batch): array
     {
-        $todo  = [];
-        $ready = [];
+        $todo       = [];
+        $ready      = [];
+        $cachePrefix = self::pluginContextCachePrefix();
 
         foreach ($batch as $id => $row) {
-            $ck = $language . "\n" . $row['msgid'] . "\n" . $row['old'] . "\n" . $row['new'];
+            $ck = $cachePrefix . $language . "\n" . $row['msgid'] . "\n" . $row['old'] . "\n" . $row['new'];
             if (isset($this->cache[$ck])) {
                 $ready[$id] = $this->cache[$ck];
             } else {
@@ -170,14 +190,41 @@ final class AiWorthinessJudge
         if ($todo !== []) {
             $judged = $this->judgeBatch($apiKey, $language, $todo);
             foreach ($judged as $id => $j) {
-                $row       = $todo[$id];
-                $ck        = $language . "\n" . $row['msgid'] . "\n" . $row['old'] . "\n" . $row['new'];
+                $row = $todo[$id];
+                $ck  = $cachePrefix . $language . "\n" . $row['msgid'] . "\n" . $row['old'] . "\n" . $row['new'];
                 $this->cache[$ck] = $j;
-                $ready[$id]      = $j;
+                $ready[$id]       = $j;
             }
         }
 
         return $ready;
+    }
+
+    private static function pluginContextFromEnv(): ?string
+    {
+        $raw = getenv(self::ENV_AI_PLUGIN_CONTEXT);
+        if ($raw === false) {
+            return null;
+        }
+        $s = trim((string) $raw);
+        if ($s === '') {
+            return null;
+        }
+        if (strlen($s) > self::AI_PLUGIN_CONTEXT_MAX_BYTES) {
+            $s = substr($s, 0, self::AI_PLUGIN_CONTEXT_MAX_BYTES);
+        }
+
+        return $s;
+    }
+
+    /**
+     * Isolate in-memory cache when optional plugin_context differs.
+     */
+    private static function pluginContextCachePrefix(): string
+    {
+        $ctx = self::pluginContextFromEnv();
+
+        return $ctx === null ? '' : (sha1($ctx) . "\n");
     }
 
     /**

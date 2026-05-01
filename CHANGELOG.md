@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Added: New `--audit` command and comprehensive options for translation auditing.
 - Changed: README now documents the translation audit CLI.
+- Documented: `PLUGIN_AI_CONTEXT` (optional plugin blurb for the audit AI text / worthiness judge); see README and `publishpress-translate --help`.
 
 [1.0.5] - 16 April, 2026
 

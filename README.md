@@ -103,6 +103,8 @@ Or create a `.env` file in your plugin root (don't commit this!):
 ```
 OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
+# Optional: short plugin description for translation audit AI text check (see Additional configuration)
+# PLUGIN_AI_CONTEXT=PublishPress Future — schedule and automate post status changes.
 ```
 > **Note:** Shell environment variables take precedence over `.env` file values.
 
@@ -120,6 +122,9 @@ The following environment variables control advanced behaviour:
   If it is **missing**:
   - In **dry run** mode, the tool prints a warning but continues so you can verify the workflow without incurring cost.
   - In **live** mode, the tool prints a clear warning and exits before making any API calls.
+
+- **`PLUGIN_AI_CONTEXT`** (optional; translation audit **`text`** check only)
+  Short free-text description of the plugin or product under audit (for example what it does, who it is for, or official product naming). When set and non-empty after trimming, it is sent to the OpenAI worthiness judge as `plugin_context` alongside the diff batch so judgments can use domain and terminology context. If unset, empty, or whitespace-only, nothing extra is sent. Values longer than 4000 bytes are truncated before the request.
 
 - **`WEBLATE_API_TOKEN`** (optional for AI generation, required for Weblate sync)
   If not set, Weblate integration is disabled:
@@ -403,6 +408,8 @@ vendor/bin/publishpress-translate --audit --audit-only=text --languages=de_DE
 ```bash
 vendor/bin/publishpress-translate --audit --audit-max-cost=2.5
 ```
+
+**Optional context for the `text` check:** set `PLUGIN_AI_CONTEXT` to a short blurb about the plugin under audit if you want the AI judge to weigh domain-specific wording. See **Additional configuration** for behavior and limits.
 
 **Report files:** By default, findings are summarized on the terminal only. To also write full reports to disk:
 
