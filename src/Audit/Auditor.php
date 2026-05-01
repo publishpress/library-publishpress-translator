@@ -102,6 +102,8 @@ final class Auditor
             return true;
         }
 
+        $streamFindings = !$this->options->usesReportFiles();
+
         foreach ($checks as $c) {
             if (!$this->options->shouldRun($c->id())) {
                 continue;
@@ -111,15 +113,31 @@ final class Auditor
             $found = $c->run($ctx);
             foreach ($found as $f) {
                 $allFindings[] = $f;
-                $this->printFinding($f);
+                if ($streamFindings) {
+                    $this->printFinding($f);
+                }
             }
         }
 
-        if ($allFindings === []) {
-            $this->output->line('No audit checks ran (--audit-only filter may be empty).');
+        if ($allFindings === [] && $streamFindings) {
+            $this->output->line('No findings.');
         }
 
         $this->output->separator();
+
+        if ($this->options->usesReportFiles()) {
+            $passed = !self::shouldFail($allFindings);
+            $dir    = $this->options->reportOutputDir($this->pluginRoot);
+            AuditReportWriter::writeFiles(
+                $allFindings,
+                $this->options->reportFormats(),
+                $dir,
+                $this->pluginDisplayName,
+                $this->pluginVersion,
+                $passed,
+                $this->output
+            );
+        }
 
         return !self::shouldFail($allFindings);
     }

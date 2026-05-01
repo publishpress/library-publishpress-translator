@@ -153,6 +153,8 @@ $options = getopt('', [
     'audit-mode:',
     'audit-max-cost:',
     'audit-only:',
+    'audit-report-format:',
+    'audit-report-dir:',
     'audit-strict-po',
     'help',
 ]);
@@ -181,6 +183,9 @@ Options:
   --audit-mode=MODE      interactive (default) | allow-edit | report
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
   --audit-only=LIST      Comma-separated: text,empty,fuzzy,pot,version (default: all)
+  --audit-report-format=LIST  Optional. Write report files: txt (plain UTF-8, CI/logs), ansi (colors), html
+                               Comma-separated; multiple files. Aliases: plain,text → txt. Default: stream only
+  --audit-report-dir=DIR Optional directory for reports (default: plugin root)
   --audit-strict-po      Reserved (strict parse needs gettext v5; wp-cli uses gettext v4)
   --help                 Show this help message
 
@@ -197,6 +202,7 @@ Examples:
   publishpress-translate --audit                   # Run all audit checks
   publishpress-translate --audit --audit-mode=report
   publishpress-translate --audit --audit-only=text,empty --languages=de_DE
+  publishpress-translate --audit --audit-report-format=txt,html --audit-report-dir=./build
 
 Environment Variables:
   OPENAI_API_KEY               Required for AI translations (not needed for --dry-run or --download)
@@ -259,6 +265,20 @@ try {
 
     if (isset($options['audit-strict-po'])) {
         $translator->setAuditStrictPo(true);
+    }
+
+    if (!empty($options['audit-report-format'])) {
+        $fmt = $options['audit-report-format'];
+        $fmt = is_array($fmt) ? implode(',', $fmt) : (string) $fmt;
+        $parts = array_map('trim', explode(',', $fmt));
+        $parts = array_filter($parts);
+        $translator->setAuditReportFormats($parts);
+    }
+
+    if (isset($options['audit-report-dir'])) {
+        $dir = $options['audit-report-dir'];
+        $dir = is_array($dir) ? end($dir) : (string) $dir;
+        $translator->setAuditReportDir($dir !== '' ? $dir : null);
     }
 
     $modeMap = [

@@ -25,19 +25,36 @@ final class AuditOptions
     private $strictPo;
 
     /**
-     * @param string[] $only
+     * @var string[]
      */
-    private function __construct(string $mode, float $maxCostUsd, array $only, bool $strictPo)
-    {
-        $this->mode       = $mode;
-        $this->maxCostUsd = $maxCostUsd;
-        $this->only       = $only;
-        $this->strictPo   = $strictPo;
+    private $reportFormats;
+
+    /** @var string|null */
+    private $reportDir;
+
+    /**
+     * @param string[] $only
+     * @param string[] $reportFormats AuditReportFormat::* values
+     */
+    private function __construct(
+        string $mode,
+        float $maxCostUsd,
+        array $only,
+        bool $strictPo,
+        array $reportFormats,
+        ?string $reportDir
+    ) {
+        $this->mode           = $mode;
+        $this->maxCostUsd     = $maxCostUsd;
+        $this->only           = $only;
+        $this->strictPo       = $strictPo;
+        $this->reportFormats  = $reportFormats;
+        $this->reportDir      = $reportDir;
     }
 
     public static function defaults(): self
     {
-        return new self('interactive', 5.0, CheckId::all(), false);
+        return new self('interactive', 5.0, CheckId::all(), false, [], null);
     }
 
     public function withMode(string $mode): self
@@ -49,7 +66,7 @@ final class AuditOptions
             );
         }
 
-        return new self($mode, $this->maxCostUsd, $this->only, $this->strictPo);
+        return new self($mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir);
     }
 
     public function withMaxCost(float $usd): self
@@ -58,7 +75,7 @@ final class AuditOptions
             throw new InvalidArgumentException('audit max cost must be >= 0');
         }
 
-        return new self($this->mode, $usd, $this->only, $this->strictPo);
+        return new self($this->mode, $usd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir);
     }
 
     /**
@@ -74,12 +91,41 @@ final class AuditOptions
             }
         }
 
-        return new self($this->mode, $this->maxCostUsd, array_values(array_unique($checks)), $this->strictPo);
+        return new self(
+            $this->mode,
+            $this->maxCostUsd,
+            array_values(array_unique($checks)),
+            $this->strictPo,
+            $this->reportFormats,
+            $this->reportDir
+        );
     }
 
     public function withStrictPo(bool $strict): self
     {
-        return new self($this->mode, $this->maxCostUsd, $this->only, $strict);
+        return new self($this->mode, $this->maxCostUsd, $this->only, $strict, $this->reportFormats, $this->reportDir);
+    }
+
+    /**
+     * @param string[] $formats Raw CLI tokens (comma-split); validated canonical ids
+     */
+    public function withReportFormats(array $formats): self
+    {
+        $canonical = AuditReportFormat::parseList($formats);
+
+        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $canonical, $this->reportDir);
+    }
+
+    public function withReportDir(?string $dir): self
+    {
+        if ($dir !== null) {
+            $dir = trim($dir);
+            if ($dir === '') {
+                throw new InvalidArgumentException('audit report directory must not be empty when set');
+            }
+        }
+
+        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $dir);
     }
 
     /**
@@ -120,6 +166,33 @@ final class AuditOptions
     public function strictPo(): bool
     {
         return $this->strictPo;
+    }
+
+    /**
+     * @return string[]
+     */
+    public function reportFormats(): array
+    {
+        return $this->reportFormats;
+    }
+
+    public function reportDir(): ?string
+    {
+        return $this->reportDir;
+    }
+
+    public function usesReportFiles(): bool
+    {
+        return $this->reportFormats !== [];
+    }
+
+    public function reportOutputDir(string $pluginRoot): string
+    {
+        if ($this->reportDir !== null && $this->reportDir !== '') {
+            return rtrim(str_replace('\\', '/', $this->reportDir), '/');
+        }
+
+        return rtrim(str_replace('\\', '/', $pluginRoot), '/');
     }
 
     public function shouldRun(string $checkId): bool

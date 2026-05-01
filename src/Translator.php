@@ -260,6 +260,22 @@ class Translator
     }
 
     /**
+     * @param string[] $formats Raw tokens (e.g. from comma-split CLI); see AuditReportFormat
+     */
+    public function setAuditReportFormats(array $formats)
+    {
+        $this->auditOptions = $this->auditOptions->withReportFormats($formats);
+    }
+
+    /**
+     * @param string|null $dir Absolute or relative directory for audit report files
+     */
+    public function setAuditReportDir($dir)
+    {
+        $this->auditOptions = $this->auditOptions->withReportDir($dir !== null ? (string) $dir : null);
+    }
+
+    /**
      * Run translation audit checks (CLI --audit).
      *
      * @return bool
