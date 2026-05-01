@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Project-Id-Version header vs plugin Version header (optional header update).
+ * Project-Id-Version header vs plugin version (read-only). Header fixes belong in the translation workflow.
  *
  * @package PublishPress\Translations\Audit\Checks
  */
@@ -12,8 +12,6 @@ use PublishPress\Translations\Audit\AuditCheckInterface;
 use PublishPress\Translations\Audit\AuditContext;
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
-use PublishPress\Translations\Audit\Support\InteractivePrompt;
-use PublishPress\Translations\Audit\Support\PoEntrySplicer;
 use PublishPress\Translations\Audit\Support\PoFile;
 
 final class PoVersionCheck implements AuditCheckInterface
@@ -47,10 +45,9 @@ final class PoVersionCheck implements AuditCheckInterface
             return $findings;
         }
 
-        $strict  = $ctx->options()->strictPo();
-        $dir     = $ctx->languagesDir();
-        $prompt  = new InteractivePrompt();
-        $want    = trim($ctx->pluginDisplayName()) . ' ' . trim($pluginV);
+        $strict = $ctx->options()->strictPo();
+        $dir    = $ctx->languagesDir();
+        $want   = trim($ctx->pluginDisplayName()) . ' ' . trim($pluginV);
 
         foreach ($ctx->targetLanguages() as $locale) {
             $pattern = $dir . '/*-' . $locale . '.po';
@@ -74,15 +71,20 @@ final class PoVersionCheck implements AuditCheckInterface
 
                 $rawHeader = $po->header('Project-Id-Version');
                 if ($rawHeader === null || $rawHeader === '') {
+                    $msg     = 'Project-Id-Version header missing — set it via translation export / Weblate; this audit does not edit .po headers.';
+                    $summary = 'Project-Id-Version header missing';
+                    $details = ['Suggested Project-Id-Version:', $want];
                     $findings[] = new AuditFinding(
                         $this->id(),
                         'warning',
                         $rel,
                         $locale,
-                        'Project-Id-Version header missing (manual edit or regenerate .po).',
+                        $msg,
                         null,
                         $want,
-                        'none (report mode)'
+                        null,
+                        $details,
+                        $summary
                     );
                     continue;
                 }
@@ -113,7 +115,7 @@ final class PoVersionCheck implements AuditCheckInterface
                         'warning',
                         $rel,
                         $locale,
-                        'PO claims newer version (' . $poVer . ') than plugin (' . $pluginV . ') — not auto-fixed.',
+                        'PO claims newer version (' . $poVer . ') than plugin (' . $pluginV . ') — not changed by this audit.',
                         $rawHeader,
                         null,
                         null
@@ -121,79 +123,26 @@ final class PoVersionCheck implements AuditCheckInterface
                     continue;
                 }
 
-                $msg = 'Project-Id-Version outdated (' . $poVer . ' < ' . $pluginV . ').';
-                if ($ctx->isReportOnly()) {
-                    $findings[] = new AuditFinding(
-                        $this->id(),
-                        'warning',
-                        $rel,
-                        $locale,
-                        $msg,
-                        $rawHeader,
-                        $want,
-                        'none (report mode)'
-                    );
-                    continue;
-                }
-
-                $do = $ctx->isAllowEdit();
-                if ($ctx->isInteractive()) {
-                    $a = $prompt->askHeaderAction($msg . ' Suggested: ' . $want);
-                    if ($a === 'quit') {
-                        $findings[] = new AuditFinding(
-                            $this->id(),
-                            'warning',
-                            $rel,
-                            $locale,
-                            'User quit check.',
-                            $rawHeader,
-                            $want,
-                            'quit'
-                        );
-
-                        return $findings;
-                    }
-                    $do = $a === 'update';
-                }
-
-                if (!$do) {
-                    $findings[] = new AuditFinding(
-                        $this->id(),
-                        'info',
-                        $rel,
-                        $locale,
-                        'Skipped header update.',
-                        $rawHeader,
-                        $want,
-                        'kept'
-                    );
-                    continue;
-                }
-
-                try {
-                    PoEntrySplicer::replaceProjectIdVersion($file, $want);
-                    $findings[] = new AuditFinding(
-                        $this->id(),
-                        'info',
-                        $rel,
-                        $locale,
-                        'Updated Project-Id-Version.',
-                        $rawHeader,
-                        $want,
-                        'edited-header'
-                    );
-                } catch (\Throwable $e) {
-                    $findings[] = new AuditFinding(
-                        $this->id(),
-                        'warning',
-                        $rel,
-                        $locale,
-                        'Header update failed: ' . $e->getMessage(),
-                        $rawHeader,
-                        $want,
-                        null
-                    );
-                }
+                $msg     = 'Project-Id-Version outdated (' . $poVer . ' < ' . $pluginV . '). Update via translation export / Weblate — this audit does not edit .po headers.';
+                $summary = 'Project-Id-Version outdated (' . $poVer . ' < ' . $pluginV . ')';
+                $details = [
+                    'Current header value:',
+                    $rawHeader,
+                    'Suggested Project-Id-Version:',
+                    $want,
+                ];
+                $findings[] = new AuditFinding(
+                    $this->id(),
+                    'warning',
+                    $rel,
+                    $locale,
+                    $msg,
+                    $rawHeader,
+                    $want,
+                    null,
+                    $details,
+                    $summary
+                );
             }
         }
 

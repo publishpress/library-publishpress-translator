@@ -180,7 +180,8 @@ Options:
   --clean-po             Clean duplicate entries from all .po files
   --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
   --audit                Audit translations (diff worthiness, empty, fuzzy, POT mismatch, header version)
-  --audit-mode=MODE      interactive (default) | allow-edit | report
+  --audit-mode=MODE      interactive (default) | allow-edit | report — prompts/reverts apply only to the AI text-change
+                               check; version header and other checks are read-only
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
   --audit-only=LIST      Comma-separated: text,empty,fuzzy,pot,version (default: all)
   --audit-report-format=LIST  Optional. Also write report files: txt (plain UTF-8, CI/logs), ansi (colors), html

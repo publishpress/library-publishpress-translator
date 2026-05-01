@@ -52,27 +52,4 @@ final class InteractivePrompt
 
         return 'keep';
     }
-
-    /**
-     * @return string update|skip|quit
-     */
-    public function askHeaderAction(string $summary): string
-    {
-        fwrite(STDOUT, $summary . "\n[u]pdate  [s]kip  [q]uit check: ");
-
-        $line = fgets(STDIN);
-        if ($line === false) {
-            return 'skip';
-        }
-
-        $c = strtolower(trim($line));
-        if ($c === 'u' || $c === 'update') {
-            return 'update';
-        }
-        if ($c === 'q' || $c === 'quit') {
-            return 'quit';
-        }
-
-        return 'skip';
-    }
 }
