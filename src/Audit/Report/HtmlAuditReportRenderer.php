@@ -25,14 +25,7 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
         $status  = $ctx->passed() ? 'passed' : 'failed';
         $rows    = '';
         foreach ($findings as $f) {
-            $rows .= '<tr>'
-                . '<td>' . htmlspecialchars($f->severity, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . '<td>' . htmlspecialchars($f->checkId, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . '<td>' . htmlspecialchars($f->file, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . '<td>' . htmlspecialchars($f->language, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . '<td>' . htmlspecialchars($f->message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . '<td>' . htmlspecialchars((string) $f->actionTaken, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-                . "</tr>\n";
+            $rows .= self::findingRow($f);
         }
         if ($rows === '') {
             $rows = '<tr><td colspan="6">(no findings)</td></tr>' . "\n";
@@ -41,15 +34,34 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
         return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
             . '<title>Translation audit — ' . $escName . '</title>'
             . '<style>body{font-family:system-ui,sans-serif;margin:1.5rem;line-height:1.4}'
-            . 'table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left}'
-            . 'th{background:#f4f4f4}.meta{margin-bottom:1rem}</style></head><body>'
+            . 'table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;vertical-align:top}'
+            . 'th{background:#f4f4f4}.meta{margin-bottom:1rem}'
+            . 'pre.detail{margin:.35rem 0 0;white-space:pre-wrap;word-break:break-word;font-size:.9rem;background:#f9f9f9;padding:.5rem;border:1px solid #e0e0e0}</style></head><body>'
             . '<h1>Translation audit</h1>'
             . '<div class="meta"><strong>Plugin:</strong> ' . $escName . '<br>'
             . '<strong>Version:</strong> ' . $ver . '<br>'
             . '<strong>Generated (UTC):</strong> ' . htmlspecialchars(gmdate('Y-m-d H:i:s'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '<br>'
             . '<strong>Result:</strong> ' . htmlspecialchars($status, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '<br>'
             . '<strong>Findings:</strong> ' . count($findings) . '</div>'
-            . '<table><thead><tr><th>Severity</th><th>Check</th><th>File</th><th>Language</th><th>Message</th><th>Action</th></tr></thead>'
+            . '<table><thead><tr><th>Severity</th><th>Check</th><th>File</th><th>Language</th><th>Summary</th><th>Action</th></tr></thead>'
             . '<tbody>' . $rows . '</tbody></table></body></html>' . "\n";
+    }
+
+    private static function findingRow(AuditFinding $f): string
+    {
+        $msgCell = htmlspecialchars($f->reportHeadline(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $details = $f->reportDetails();
+        if ($details !== []) {
+            $msgCell .= '<pre class="detail">' . htmlspecialchars(implode("\n", $details), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
+        }
+
+        return '<tr>'
+            . '<td>' . htmlspecialchars($f->severity, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . '<td>' . htmlspecialchars($f->checkId, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . '<td>' . htmlspecialchars($f->file, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . '<td>' . htmlspecialchars($f->language, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . '<td>' . $msgCell . '</td>'
+            . '<td>' . htmlspecialchars((string) $f->actionTaken, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . "</tr>\n";
     }
 }

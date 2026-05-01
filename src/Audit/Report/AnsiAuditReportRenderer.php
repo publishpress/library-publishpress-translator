@@ -27,27 +27,17 @@ final class AnsiAuditReportRenderer implements AuditReportRendererInterface
         $lines[] = 'Findings: ' . count($findings);
         $lines[] = str_repeat('-', 72);
         foreach ($findings as $f) {
-            $lines[] = self::colorizeFindingLine(AuditReportFindingFormatter::plainLine($f));
+            $lines[] = AuditReportFindingFormatter::colorizeSeverityLine(
+                AuditReportFindingFormatter::plainLineForReport($f)
+            );
+            foreach ($f->reportDetails() as $detailLine) {
+                $lines[] = AuditReportFindingFormatter::colorizeDetailLine('  ' . $detailLine);
+            }
         }
         if ($findings === []) {
             $lines[] = '(no findings)';
         }
 
         return implode("\n", $lines) . "\n";
-    }
-
-    private static function colorizeFindingLine(string $line): string
-    {
-        if (strpos($line, '[error]') === 0) {
-            return "\033[31m" . $line . "\033[0m";
-        }
-        if (strpos($line, '[warning]') === 0) {
-            return "\033[33m" . $line . "\033[0m";
-        }
-        if (strpos($line, '[info]') === 0) {
-            return "\033[34m" . $line . "\033[0m";
-        }
-
-        return $line;
     }
 }

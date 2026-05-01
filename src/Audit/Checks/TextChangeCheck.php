@@ -236,7 +236,9 @@ final class TextChangeCheck implements AuditCheckInterface
                     'OPENAI_API_KEY missing — cannot judge change for msgid: ' . $chg['msgid'],
                     $row['old'],
                     $row['new'],
-                    'unjudged (no API key)'
+                    'unjudged (no API key)',
+                    self::translationDiffReportLines($chg),
+                    'OPENAI_API_KEY missing — cannot judge translation change'
                 );
             }
             $pending = [];
@@ -255,7 +257,9 @@ final class TextChangeCheck implements AuditCheckInterface
                     'Cost cap reached — not judged: ' . $chg['msgid'],
                     $row['old'],
                     $row['new'],
-                    'unjudged (cost cap)'
+                    'unjudged (cost cap)',
+                    self::translationDiffReportLines($chg),
+                    'Cost cap reached — not judged'
                 );
             }
             $pending = [];
@@ -296,6 +300,22 @@ final class TextChangeCheck implements AuditCheckInterface
 
     /**
      * @param array<string,mixed> $chg
+     *
+     * @return string[]
+     */
+    private static function translationDiffReportLines(array $chg): array
+    {
+        return [
+            'msgid: ' . $chg['msgid'],
+            '--- msgstr (previous) ---',
+            (string) $chg['old'],
+            '--- msgstr (current) ---',
+            (string) $chg['new'],
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $chg
      */
     private static function applyOne(
         AuditContext $ctx,
@@ -308,28 +328,36 @@ final class TextChangeCheck implements AuditCheckInterface
         string $reason
     ): AuditFinding {
         if ($worthy) {
+            $msg = 'Worthy: ' . $reason;
+
             return new AuditFinding(
                 CheckId::TEXT_CHANGE,
                 'info',
                 $relPath,
                 $locale,
-                'Worthy: ' . $reason,
+                $msg,
                 $chg['old'],
                 $chg['new'],
-                'kept'
+                'kept',
+                self::translationDiffReportLines($chg),
+                $msg
             );
         }
 
         if ($ctx->isReportOnly()) {
+            $msg = 'Not worth keeping: ' . $reason;
+
             return new AuditFinding(
                 CheckId::TEXT_CHANGE,
                 'warning',
                 $relPath,
                 $locale,
-                'Not worth keeping: ' . $reason,
+                $msg,
                 $chg['old'],
                 $chg['new'],
-                'none (report mode)'
+                'none (report mode)',
+                self::translationDiffReportLines($chg),
+                $msg
             );
         }
 
@@ -346,30 +374,38 @@ final class TextChangeCheck implements AuditCheckInterface
                 $act = $prompt->askDiffAction('Action?');
             }
             if ($act === 'quit') {
+                $msg = 'User quit check: ' . $reason;
+
                 return new AuditFinding(
                     CheckId::TEXT_CHANGE,
                     'warning',
                     $relPath,
                     $locale,
-                    'User quit check: ' . $reason,
+                    $msg,
                     $chg['old'],
                     $chg['new'],
-                    'quit'
+                    'quit',
+                    self::translationDiffReportLines($chg),
+                    $msg
                 );
             }
             $doRevert = $act === 'revert';
         }
 
         if (!$doRevert) {
+            $msg = 'Kept after review: ' . $reason;
+
             return new AuditFinding(
                 CheckId::TEXT_CHANGE,
                 'info',
                 $relPath,
                 $locale,
-                'Kept after review: ' . $reason,
+                $msg,
                 $chg['old'],
                 $chg['new'],
-                'kept'
+                'kept',
+                self::translationDiffReportLines($chg),
+                $msg
             );
         }
 
@@ -387,15 +423,19 @@ final class TextChangeCheck implements AuditCheckInterface
             $action = 'revert failed: ' . $e->getMessage();
         }
 
+        $msg = 'Not worth keeping: ' . $reason;
+
         return new AuditFinding(
             CheckId::TEXT_CHANGE,
             'warning',
             $relPath,
             $locale,
-            'Not worth keeping: ' . $reason,
+            $msg,
             $chg['old'],
             $chg['new'],
-            $action
+            $action,
+            self::translationDiffReportLines($chg),
+            $msg
         );
     }
 

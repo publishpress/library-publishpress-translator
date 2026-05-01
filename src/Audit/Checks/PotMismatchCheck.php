@@ -101,22 +101,37 @@ final class PotMismatchCheck implements AuditCheckInterface
                     continue;
                 }
 
+                $detailLines = [];
+                $detailLines[] = '--- Orphan msgids (.po keys not in .pot) — ' . count($orphan) . ' ---';
+                foreach (array_keys($orphan) as $k) {
+                    $detailLines[] = str_replace("\004", '|', $k);
+                }
+                $detailLines[] = '--- Missing msgids (.pot keys not in .po) — ' . count($miss) . ' ---';
+                foreach (array_keys($miss) as $k) {
+                    $detailLines[] = str_replace("\004", '|', $k);
+                }
+
+                $summary = sprintf(
+                    'vs %s: orphans=%d missing=%d',
+                    basename($potPath),
+                    count($orphan),
+                    count($miss)
+                );
+                $msg = $summary
+                    . ' | orphan sample: ' . self::sampleKeys($orphan, 5)
+                    . ' | missing sample: ' . self::sampleKeys($miss, 5);
+
                 $findings[] = new AuditFinding(
                     $this->id(),
                     'warning',
                     $relPo,
                     $locale,
-                    sprintf(
-                        'vs %s: orphans=%d missing=%d | orphan sample: %s | missing sample: %s',
-                        basename($potPath),
-                        count($orphan),
-                        count($miss),
-                        self::sampleKeys($orphan, 5),
-                        self::sampleKeys($miss, 5)
-                    ),
+                    $msg,
                     null,
                     null,
-                    null
+                    null,
+                    $detailLines,
+                    $summary
                 );
             }
         }

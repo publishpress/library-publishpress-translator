@@ -27,7 +27,7 @@ final class TxtAuditReportRenderer implements AuditReportRendererInterface
         $lines[] = 'Findings: ' . count($findings);
         $lines[] = str_repeat('-', 72);
         foreach ($findings as $f) {
-            $lines[] = AuditReportFindingFormatter::plainLine($f);
+            AuditReportFindingFormatter::appendFindingBlockForReport($lines, $f);
         }
         if ($findings === []) {
             $lines[] = '(no findings)';

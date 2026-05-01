@@ -63,10 +63,12 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                     continue;
                 }
 
-                $sampleEmpty = self::sampleMsgids($empty, 8);
-                $msg         = sprintf('empty=%d', count($empty));
-                if ($sampleEmpty !== '') {
-                    $msg .= ' | empty msgid sample: ' . $sampleEmpty;
+                $detailLines = self::msgidLinesForReport($empty);
+                $summary     = 'empty=' . count($empty);
+                $preview     = self::cliPreviewFromLines($detailLines, 8);
+                $msg         = $summary;
+                if ($preview !== '') {
+                    $msg .= ' | empty msgid sample: ' . $preview;
                 }
 
                 $findings[] = new AuditFinding(
@@ -77,7 +79,9 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                     $msg,
                     null,
                     null,
-                    null
+                    null,
+                    $detailLines,
+                    $summary
                 );
             }
         }
@@ -86,18 +90,35 @@ final class EmptyTranslationCheck implements AuditCheckInterface
     }
 
     /**
+     * Full msgid/context lines for file reports (not truncated).
+     *
      * @param array<int,\Gettext\Translation> $entries
+     *
+     * @return string[]
      */
-    private static function sampleMsgids(array $entries, int $max): string
+    private static function msgidLinesForReport(array $entries): array
     {
-        $bits = [];
-        foreach (array_slice($entries, 0, $max) as $t) {
+        $out = [];
+        foreach ($entries as $t) {
             $c = $t->getContext();
             $m = $t->getOriginal();
-            $bits[] = ($c !== null && $c !== '' ? '[' . $c . '] ' : '') . self::shorten($m);
+            $out[] = ($c !== null && $c !== '' ? '[' . $c . '] ' : '') . $m;
         }
 
-        return implode('; ', $bits);
+        return $out;
+    }
+
+    /**
+     * @param string[] $lines
+     */
+    private static function cliPreviewFromLines(array $lines, int $max): string
+    {
+        $bits = [];
+        foreach (array_slice($lines, 0, $max) as $line) {
+            $bits[] = self::shorten($line);
+        }
+
+        return $bits === [] ? '' : implode('; ', $bits);
     }
 
     private static function shorten(string $s): string

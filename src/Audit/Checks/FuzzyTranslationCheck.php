@@ -63,10 +63,12 @@ final class FuzzyTranslationCheck implements AuditCheckInterface
                     continue;
                 }
 
-                $sampleFuzzy = self::sampleMsgids($fuzzy, 8);
-                $msg         = sprintf('fuzzy=%d', count($fuzzy));
-                if ($sampleFuzzy !== '') {
-                    $msg .= ' | fuzzy msgid sample: ' . $sampleFuzzy;
+                $detailLines = self::msgidLinesForReport($fuzzy);
+                $summary     = 'fuzzy=' . count($fuzzy);
+                $preview     = self::cliPreviewFromLines($detailLines, 8);
+                $msg         = $summary;
+                if ($preview !== '') {
+                    $msg .= ' | fuzzy msgid sample: ' . $preview;
                 }
 
                 $findings[] = new AuditFinding(
@@ -77,7 +79,9 @@ final class FuzzyTranslationCheck implements AuditCheckInterface
                     $msg,
                     null,
                     null,
-                    null
+                    null,
+                    $detailLines,
+                    $summary
                 );
             }
         }
@@ -87,17 +91,32 @@ final class FuzzyTranslationCheck implements AuditCheckInterface
 
     /**
      * @param array<int,\Gettext\Translation> $entries
+     *
+     * @return string[]
      */
-    private static function sampleMsgids(array $entries, int $max): string
+    private static function msgidLinesForReport(array $entries): array
     {
-        $bits = [];
-        foreach (array_slice($entries, 0, $max) as $t) {
+        $out = [];
+        foreach ($entries as $t) {
             $c = $t->getContext();
             $m = $t->getOriginal();
-            $bits[] = ($c !== null && $c !== '' ? '[' . $c . '] ' : '') . self::shorten($m);
+            $out[] = ($c !== null && $c !== '' ? '[' . $c . '] ' : '') . $m;
         }
 
-        return implode('; ', $bits);
+        return $out;
+    }
+
+    /**
+     * @param string[] $lines
+     */
+    private static function cliPreviewFromLines(array $lines, int $max): string
+    {
+        $bits = [];
+        foreach (array_slice($lines, 0, $max) as $line) {
+            $bits[] = self::shorten($line);
+        }
+
+        return $bits === [] ? '' : implode('; ', $bits);
     }
 
     private static function shorten(string $s): string
