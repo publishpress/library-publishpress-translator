@@ -12,6 +12,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 - **Supports 10+ languages** by default
 - **Dry-run mode** for cost estimation
 - **Automatic detection** of `.pot` files
+- **Translation audit** (`--audit`) to review `.po` health (empty/fuzzy entries, POT alignment, version headers) and optionally judge AI worthiness of changed strings
 
 ## Requirements
 
@@ -45,7 +46,9 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         "translate:force-custom": "vendor/bin/publishpress-translate --force --languages",
         "translate:repair-plurals": "vendor/bin/publishpress-translate --repair-plurals",
         "translate:clean-po": "vendor/bin/publishpress-translate --clean-po",
-        "translate:sync-files": "vendor/bin/publishpress-translate --sync-files"
+        "translate:sync-files": "vendor/bin/publishpress-translate --sync-files",
+        "translate:audit": "vendor/bin/publishpress-translate --audit",
+        "translate:audit:report": "vendor/bin/publishpress-translate --audit --audit-mode=report"
     }
 }
 ```
@@ -278,6 +281,9 @@ vendor/bin/publishpress-translate --clean-po
 
 # Verify .po files are present (external tools compile to .mo, .json, .l10n.php)
 vendor/bin/publishpress-translate --sync-files
+
+# Run all translation audit checks (see "Translation audit" below)
+vendor/bin/publishpress-translate --audit
 ```
 
 #### 4. Repair Malformed Plural Entries
@@ -348,6 +354,68 @@ Compile `.mo`, `.json`, and `.l10n.php` files from `.po` sources using:
 
 The library verifies compilation status but delegates actual compilation to your build/deployment tools.
 
+#### 7. Translation audit (`--audit`)
+
+Run static checks (and optionally an OpenAI "worthiness" review) on `.po` files under `languages/`. This does **not** call Weblate or run the normal translate/upload cycle.
+
+**Basic usage:**
+
+```bash
+vendor/bin/publishpress-translate --audit
+# or
+composer translate:audit
+```
+
+**What it checks** (all run by default; see `--audit-only` to limit):
+
+| Id | Focus |
+| --- | --- |
+| `text` | Git-changed `.po` entries: optional AI judgment whether the translation still fits the source (uses `OPENAI_API_KEY`; spending capped by `--audit-max-cost`) |
+| `empty` | Untranslated (`msgstr` empty) strings |
+| `fuzzy` | Fuzzy-flagged entries |
+| `pot` | Strings present in `.pot` but missing or mismatched in `.po` |
+| `version` | `Project-Id-Version` header vs plugin version (advisory; headers are not rewritten by the tool) |
+
+**Modes (`--audit-mode`):**
+
+- `interactive` (default) - on the **text** check, prompts whether to keep or revert each change the judge flags as not worth keeping (TTY only). Other checks are read-only.
+- `allow-edit` - same **text** check, but unworthy changes are **reverted automatically** (no prompts). Other checks stay read-only.
+- `report` - lists findings only; nothing is reverted. **CI / non-TTY:** with the default `interactive`, the tool switches to `report` and prints a notice.
+
+```bash
+composer translate:audit:report
+vendor/bin/publishpress-translate --audit --audit-mode=report
+```
+
+**Scope:** Only locales in the translator **target language** list are scanned (same defaults and `--languages` handling as AI translation). Codes filtered out by `SKIP_LANGUAGES` / built-in skipped locales are **not** audited, even if you list them in `--languages`. To audit a narrower set of allowed locales, use e.g. `--languages=de_DE,fr_FR`.
+
+**Run a subset of checks:**
+
+```bash
+vendor/bin/publishpress-translate --audit --audit-only=empty,fuzzy,pot,version
+vendor/bin/publishpress-translate --audit --audit-only=text --languages=de_DE
+```
+
+`--audit-only` accepts a comma-separated list: `text`, `empty`, `fuzzy`, `pot`, `version`.
+
+**Cost control (text check only):**
+
+```bash
+vendor/bin/publishpress-translate --audit --audit-max-cost=2.5
+```
+
+**Report files:** By default, findings are summarized on the terminal only. To also write full reports to disk:
+
+```bash
+vendor/bin/publishpress-translate --audit --audit-report-format=txt,html --audit-report-dir=./build
+```
+
+Formats: `txt` (plain UTF-8, good for CI logs), `ansi` (color codes), `html` (single-file overview). Aliases `plain` and `text` map to `txt`. If `--audit-report-dir` is omitted, files are written to the **plugin root**. Report files use the basename `translation-audit-report` with extensions `.txt`, `.ansi.txt`, or `.html` depending on format.
+
+**Exit code:** The process exits with a non-zero status if any finding is treated as failing (for example severity `error`, user quit at a prompt, or a failed revert). Warnings alone may still exit `0` depending on finding metadata—use `--audit-report-format=txt` in CI if you need a full artifact to review.
+
+**`--audit-strict-po`:** Reserved for stricter PO parsing when a gettext v5 stack is available; typical Composer stacks (e.g. alongside WP-CLI) still use gettext v4, so this flag may only log that strict mode is unavailable.
+
 ### Default Languages
 
 The tool translates into these languages by default:
@@ -400,7 +468,8 @@ These languages will be skipped during translation and upload processes, even if
 1. **Translation (`composer translate`)** - Skipped languages are not passed to Potomatic AI translation
 2. **Upload (`composer translate:upload`)** - Skipped languages are NOT uploaded to Weblate
 3. **Download (`composer translate:download`)** - Skipped languages ARE downloaded from Weblate (translations can be pulled but not replaced by AI)
-4. **Cleaning/Syncing** - Skipped languages ARE operated on by `--clean-po` and `--sync-files` commands (useful for maintenance without risk of overwriting with AI)
+4. **Cleaning/Syncing** - Skipped languages ARE operated on by `--clean-po` and `--sync-files` (useful for maintenance without risk of overwriting with AI)
+5. **Audit (`--audit`)** - Uses the same target-language list as translation (skipped locales are excluded by default, and `--languages` is filtered the same way), so skipped-language `.po` files are not scanned. This differs from `--clean-po` / `--sync-files`, which iterate every `.po` in `languages/`.
 
 ### Preventing Plugin Name Translation
 
