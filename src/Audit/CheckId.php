@@ -49,7 +49,7 @@ final class CheckId
             self::EMPTY_TRANSLATION   => 'Empty translations',
             self::FUZZY_TRANSLATION    => 'Fuzzy translations',
             self::POT_MISMATCH        => 'POT vs PO mismatch',
-            self::PO_VERSION          => 'PO header version',
+            self::PO_VERSION          => 'PO header',
         ];
 
         return $map[$id] ?? $id;

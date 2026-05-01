@@ -23,7 +23,7 @@ final class PoVersionCheck implements AuditCheckInterface
 
     public function title(): string
     {
-        return 'PO header Project-Id-Version vs plugin version';
+        return 'PO header';
     }
 
     public function run(AuditContext $ctx): array
@@ -72,8 +72,7 @@ final class PoVersionCheck implements AuditCheckInterface
                 $rawHeader = $po->header('Project-Id-Version');
                 if ($rawHeader === null || $rawHeader === '') {
                     $msg     = 'Project-Id-Version header missing — set it via translation export / Weblate; this audit does not edit .po headers.';
-                    $summary = 'Project-Id-Version header missing';
-                    $details = ['Suggested Project-Id-Version:', $want];
+                    $summary = 'Project-Id-Version header missing — suggested: ' . $want;
                     $findings[] = new AuditFinding(
                         $this->id(),
                         'warning',
@@ -81,9 +80,9 @@ final class PoVersionCheck implements AuditCheckInterface
                         $locale,
                         $msg,
                         null,
-                        $want,
                         null,
-                        $details,
+                        null,
+                        null,
                         $summary
                     );
                     continue;
@@ -125,12 +124,6 @@ final class PoVersionCheck implements AuditCheckInterface
 
                 $msg     = 'Project-Id-Version outdated (' . $poVer . ' < ' . $pluginV . '). Update via translation export / Weblate — this audit does not edit .po headers.';
                 $summary = 'Project-Id-Version outdated (' . $poVer . ' < ' . $pluginV . ')';
-                $details = [
-                    'Current header value:',
-                    $rawHeader,
-                    'Suggested Project-Id-Version:',
-                    $want,
-                ];
                 $findings[] = new AuditFinding(
                     $this->id(),
                     'warning',
@@ -140,7 +133,7 @@ final class PoVersionCheck implements AuditCheckInterface
                     $rawHeader,
                     $want,
                     null,
-                    $details,
+                    null,
                     $summary
                 );
             }
