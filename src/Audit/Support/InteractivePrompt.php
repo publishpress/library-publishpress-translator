@@ -27,7 +27,9 @@ final class InteractivePrompt
             return 'revert';
         }
 
-        fwrite(STDOUT, $summary . "\n[k]eep  [r]evert  [v]iew  [a]ccept-all-revert  [q]uit check: ");
+        $beforeSummary = $summary === 'Action?' ? "\n" : '';
+        $optionsLine  = '[k]eep  [r]evert  [v]iew  [a]ccept-all-revert  [q]uit check: ';
+        fwrite(STDOUT, $beforeSummary . $summary . "\n\n" . $optionsLine . "\n\n");
 
         $line = fgets(STDIN);
         if ($line === false) {
