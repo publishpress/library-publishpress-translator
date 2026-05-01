@@ -18,7 +18,8 @@ final class AuditReportWriter
 
     /**
      * @param AuditFinding[] $findings
-     * @param string[]       $formats AuditReportFormat::* list
+     * @param string[]       $formats           AuditReportFormat::* list
+     * @param string[]       $enabledCheckIds   CheckId values that ran (--audit-only)
      *
      * @return string[] absolute paths written
      */
@@ -29,7 +30,8 @@ final class AuditReportWriter
         string $pluginDisplayName,
         ?string $pluginVersion,
         bool $passed,
-        Output $output
+        Output $output,
+        array $enabledCheckIds = []
     ): array {
         $outputDir = rtrim(str_replace('\\', '/', $outputDir), '/');
         if ($outputDir === '') {
@@ -42,7 +44,7 @@ final class AuditReportWriter
             }
         }
 
-        $ctx     = new AuditReportRenderContext($pluginDisplayName, $pluginVersion, $passed);
+        $ctx     = new AuditReportRenderContext($pluginDisplayName, $pluginVersion, $passed, $enabledCheckIds);
         $written = [];
         foreach ($formats as $format) {
             $renderer = AuditReportRendererFactory::forFormat($format);

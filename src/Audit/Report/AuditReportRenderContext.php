@@ -19,11 +19,26 @@ final class AuditReportRenderContext
     /** @var bool */
     private $passed;
 
-    public function __construct(string $pluginDisplayName, ?string $pluginVersion, bool $passed)
-    {
+    /**
+     * Check ids that ran in this audit (--audit-only order).
+     *
+     * @var string[]
+     */
+    private $enabledCheckIds;
+
+    /**
+     * @param string[] $enabledCheckIds CheckId values
+     */
+    public function __construct(
+        string $pluginDisplayName,
+        ?string $pluginVersion,
+        bool $passed,
+        array $enabledCheckIds = []
+    ) {
         $this->pluginDisplayName = $pluginDisplayName;
         $this->pluginVersion     = $pluginVersion;
         $this->passed            = $passed;
+        $this->enabledCheckIds    = array_values($enabledCheckIds);
     }
 
     public function pluginDisplayName(): string
@@ -39,5 +54,13 @@ final class AuditReportRenderContext
     public function passed(): bool
     {
         return $this->passed;
+    }
+
+    /**
+     * @return string[]
+     */
+    public function enabledCheckIds(): array
+    {
+        return $this->enabledCheckIds;
     }
 }

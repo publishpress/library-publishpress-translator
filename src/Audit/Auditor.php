@@ -131,7 +131,8 @@ final class Auditor
                 $this->pluginDisplayName,
                 $this->pluginVersion,
                 $passed,
-                $this->output
+                $this->output,
+                $this->options->only()
             );
         }
 

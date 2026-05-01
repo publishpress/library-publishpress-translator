@@ -38,4 +38,20 @@ final class CheckId
     {
         return in_array($id, self::all(), true);
     }
+
+    /**
+     * Short label for reports / UI (English).
+     */
+    public static function label(string $id): string
+    {
+        $map = [
+            self::TEXT_CHANGE         => 'Text change (AI worthiness)',
+            self::EMPTY_TRANSLATION   => 'Empty translations',
+            self::FUZZY_TRANSLATION    => 'Fuzzy translations',
+            self::POT_MISMATCH        => 'POT vs PO mismatch',
+            self::PO_VERSION          => 'PO header version',
+        ];
+
+        return $map[$id] ?? $id;
+    }
 }
