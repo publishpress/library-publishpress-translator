@@ -65,6 +65,7 @@ class WeblateClient
                 'Accept' => 'application/json',
             ],
             'timeout' => (int) $timeout,
+            'connect_timeout' => (int) $timeout,
         ]);
     }
 
@@ -119,8 +120,10 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, '"code":"unique"') !== false &&
-                strpos($errorBody, '"attr":"slug"') !== false) {
+            if (
+                strpos($errorBody, '"code":"unique"') !== false
+                && strpos($errorBody, '"attr":"slug"') !== false
+            ) {
                 return [
                     'slug' => $projectSlug,
                     'name' => $projectName,
@@ -165,7 +168,7 @@ class WeblateClient
     public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
         $skipVcs = getenv('WEBLATE_SKIP_VCS') !== 'false' && getenv('WEBLATE_SKIP_VCS') !== '0';
-        
+
         try {
             $potContent = file_get_contents($potFilePath);
             if ($potContent === false) {
@@ -180,28 +183,28 @@ class WeblateClient
             ];
 
             $branch = getenv('WEBLATE_GIT_BRANCH') ?: 'development';
-            
+
             if ($skipVcs) {
                 $zipPath = sys_get_temp_dir() . '/' . $componentSlug . '-' . time() . '.zip';
                 $zip = new \ZipArchive();
-                
+
                 if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
                     throw new Exception("Failed to create ZIP file for component creation");
                 }
 
                 $zip->addFile($potFilePath, basename($potFilePath));
-                
+
                 // Create a dummy en_US.po file so Weblate can detect the language pattern
                 $potContent = file_get_contents($potFilePath);
                 $dummyPoPath = sys_get_temp_dir() . '/' . $componentSlug . '-en_US.po';
                 file_put_contents($dummyPoPath, $potContent);
                 $zip->addFile($dummyPoPath, $componentSlug . '-en_US.po');
-                
+
                 $zip->close();
-                
+
                 // Clean up temp PO file
                 @unlink($dummyPoPath);
-                
+
                 $componentData['repo'] = 'local:';
                 $componentData['vcs'] = 'local';
                 $componentData['branch'] = $branch;
@@ -209,7 +212,7 @@ class WeblateClient
                 $componentData['filemask'] = $componentSlug . '-*.po';
                 $componentData['new_lang'] = 'add';
                 $componentData['new_base'] = basename($potFilePath);
-                
+
                 // Use multipart form data with zipfile
                 $response = $this->client->post("projects/{$projectSlug}/components/", [
                     'multipart' => [
@@ -230,10 +233,10 @@ class WeblateClient
                         ],
                     ]
                 ]);
-                
+
                 // Clean up temp ZIP file
                 @unlink($zipPath);
-                
+
                 $result = json_decode($response->getBody()->getContents(), true);
                 return $result;
             } else {
@@ -256,11 +259,8 @@ class WeblateClient
                             $pushUrl = '';
                         }
                     }
-
                 } else {
-
                     if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
-
                         if (
                             $repoType === 'ssh'
                             && preg_match('#^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#', $gitRepoSlug, $matches)
@@ -273,7 +273,6 @@ class WeblateClient
                             $repoUrl = $gitRepoSlug;
                             $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
                         }
-
                     } else {
                         $repoSlug = $gitRepoSlug ?: $componentSlug;
 
@@ -286,7 +285,7 @@ class WeblateClient
                         }
                     }
                 }
-                
+
                 $componentData['repo'] = $repoUrl;
                 $componentData['branch'] = $branch;
                 $componentData['push'] = $pushUrl;
@@ -306,13 +305,14 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, 'requires authentication') !== false || 
-                strpos($errorBody, '"attr":"repo"') !== false) {
-                
+            if (
+                strpos($errorBody, 'requires authentication') !== false
+                || strpos($errorBody, '"attr":"repo"') !== false
+            ) {
                 if ($skipVcs) {
                     throw new Exception("Error creating component with local VCS: " . $e->getMessage() . "\n" . $errorBody);
                 }
-                
+
                 $helpMessage = "Error creating component: Repository requires authentication.\n\n";
                 $helpMessage .= "Options to fix this:\n";
                 $helpMessage .= "  1. Set WEBLATE_SKIP_VCS=true to create components without VCS integration\n";
@@ -327,7 +327,7 @@ class WeblateClient
             throw new Exception("Error creating component: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
-    
+
     /**
      * Clean POT file for Weblate by removing fuzzy flag from header
      *
@@ -340,11 +340,11 @@ class WeblateClient
         if ($content === false) {
             throw new Exception("Failed to read POT file: {$potFilePath}");
         }
-        
+
         $lines = explode("\n", $content);
         $cleanedLines = [];
         $headerFuzzyRemoved = false;
-        
+
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
             $trimmed = trim($line);
@@ -364,10 +364,10 @@ class WeblateClient
                     break;
                 }
             }
-            
+
             $cleanedLines[] = $line;
         }
-        
+
         return implode("\n", $cleanedLines);
     }
 
@@ -385,7 +385,7 @@ class WeblateClient
         try {
             $cleanedContent = $this->cleanPotFileForWeblate($potFilePath);
             $hasVcs = $this->componentHasVcs($projectSlug, $componentSlug);
-            
+
             if ($hasVcs) {
                 $response = $this->client->post(
                     "translations/{$projectSlug}/{$componentSlug}/en/file/",
@@ -405,7 +405,7 @@ class WeblateClient
                 );
             } else {
                 $this->ensureTranslation($projectSlug, $componentSlug, 'en');
-                
+
                 $response = $this->client->post(
                     "translations/{$projectSlug}/{$componentSlug}/en/file/",
                     [
@@ -423,21 +423,21 @@ class WeblateClient
                     ]
                 );
             }
-            
+
             $result = json_decode($response->getBody()->getContents(), true);
             return $result;
         } catch (GuzzleException $e) {
             $errorMessage = "Error uploading POT file: " . $e->getMessage();
-            
+
             // Try to extract detailed validation errors from response
             if ($e->hasResponse()) {
                 $responseBody = $e->getResponse()->getBody()->getContents();
                 $errorData = json_decode($responseBody, true);
-                
+
                 if ($errorData && isset($errorData['detail'])) {
                     $errorMessage .= "\nDetails: " . $errorData['detail'];
                 }
-                
+
                 if ($errorData && isset($errorData['errors'])) {
                     $errorMessage .= "\nValidation errors:";
                     foreach ($errorData['errors'] as $error) {
@@ -449,13 +449,13 @@ class WeblateClient
                         }
                     }
                 }
-                
+
                 // If we have the raw response but couldn't parse it, show it
                 if (!$errorData && $responseBody) {
                     $errorMessage .= "\nRaw response: " . substr($responseBody, 0, 500);
                 }
             }
-            
+
             throw new Exception($errorMessage);
         }
     }
@@ -465,7 +465,7 @@ class WeblateClient
         try {
             $response = $this->client->get("components/{$projectSlug}/{$componentSlug}/");
             $component = json_decode($response->getBody()->getContents(), true);
-            
+
             if (empty($component['repo'])) {
                 return false;
             }
@@ -530,7 +530,6 @@ class WeblateClient
         }
 
         $regionUpper = strtoupper($region);
-        $regionLower = strtolower($region);
         $langUpper = strtoupper($lang);
 
         if ($regionUpper === $langUpper) {
@@ -564,17 +563,17 @@ class WeblateClient
         $inHeaderMsgstr = false;
         $currentHeaderLines = [];
         $headerStartLine = -1;
-        
+
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
             $trimmed = trim($line);
-            
+
             if (preg_match('/^msgid\s+""?\s*$/', $trimmed)) {
                 $nextIdx = $i + 1;
                 while ($nextIdx < count($lines) && trim($lines[$nextIdx]) === '') {
                     $nextIdx++;
                 }
-                
+
                 if ($nextIdx < count($lines) && preg_match('/^msgstr\s+""?\s*$/', trim($lines[$nextIdx]))) {
                     if (!$headerFound) {
                         $headerFound = true;
@@ -584,18 +583,20 @@ class WeblateClient
                     } else {
                         $inHeader = true;
                         $inHeaderMsgstr = false;
-                        
+
                         while ($i < count($lines)) {
                             $i++;
-                            if ($i >= count($lines)) break;
-                            
+                            if ($i >= count($lines)) {
+                                break;
+                            }
+
                             $nextLine = trim($lines[$i]);
-                            
+
                             if (preg_match('/^msgid\s+"(.+)"/', $nextLine)) {
                                 $i--;
                                 break;
                             }
-                            
+
                             if (preg_match('/^msgid\s+""?\s*$/', $nextLine)) {
                                 $i--;
                                 break;
@@ -605,41 +606,41 @@ class WeblateClient
                     continue;
                 }
             }
-            
+
             if ($inHeader && $headerFound && $headerStartLine >= 0) {
                 $currentHeaderLines[] = $line;
-                
+
                 if (preg_match('/^msgstr\s+""?\s*$/', $trimmed)) {
                     $inHeaderMsgstr = true;
                 } elseif ($inHeaderMsgstr && !preg_match('/^".*"/', $trimmed) && $trimmed !== '') {
                     $inHeader = false;
                     $inHeaderMsgstr = false;
-                    
+
                     foreach ($currentHeaderLines as $headerLine) {
                         $cleanedLines[] = $headerLine;
                     }
                     $currentHeaderLines = [];
-                    
+
                     $cleanedLines[] = $line;
                 }
             } elseif (!$inHeader) {
                 $cleanedLines[] = $line;
             }
         }
-        
+
         if (!empty($currentHeaderLines)) {
             foreach ($currentHeaderLines as $headerLine) {
                 $cleanedLines[] = $headerLine;
             }
         }
-        
+
         $cleanedContent = implode("\n", $cleanedLines);
-        
+
         if ($cleanedContent !== $content) {
             @file_put_contents($poFilePath, $cleanedContent);
             return true;
         }
-        
+
         return false;
     }
 
@@ -655,33 +656,32 @@ class WeblateClient
         if ($content === false || $content === '') {
             return;
         }
-        
+
         $lines = explode("\n", $content);
         $cleanedLines = [];
         $seenReferences = [];
-        $inEntry = false;
-        
+
         foreach ($lines as $line) {
             $trimmed = trim($line);
-            
+
             if (preg_match('/^#:\s*(.+)$/', $trimmed, $matches)) {
                 $reference = $matches[1];
-                
+
                 if (isset($seenReferences[$reference])) {
                     continue;
                 }
-                
+
                 $seenReferences[$reference] = true;
                 $cleanedLines[] = $line;
             } else {
                 if (preg_match('/^msgid\s/', $trimmed)) {
                     $seenReferences = [];
                 }
-                
+
                 $cleanedLines[] = $line;
             }
         }
-        
+
         $cleanedContent = implode("\n", $cleanedLines);
         if ($cleanedContent !== $content) {
             file_put_contents($poFilePath, $cleanedContent);
@@ -701,27 +701,27 @@ class WeblateClient
         if ($content === false || $content === '') {
             return;
         }
-        
+
         $lines = explode("\n", $content);
         $result = [];
         $seenInEntry = [];
         $modified = false;
-        
+
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
             $trimmed = trim($line);
-            
+
             // Check if this is an extracted comment line
             if (preg_match('/^#\.\s*(.*)$/', $trimmed, $matches)) {
                 $commentText = $matches[1];
-                
-                // If we've already seen this exact comment in the current entry, 
+
+                // If we've already seen this exact comment in the current entry,
                 // skip adding this duplicate to the result
                 if (isset($seenInEntry[$commentText])) {
                     $modified = true;
                     continue;
                 }
-                
+
                 // First occurrence of this comment - mark it and add it
                 $seenInEntry[$commentText] = true;
                 $result[] = $line;
@@ -729,11 +729,11 @@ class WeblateClient
                 if (empty($trimmed)) {
                     $seenInEntry = [];
                 }
-                
+
                 $result[] = $line;
             }
         }
-        
+
         $cleanedContent = implode("\n", $result);
         if ($modified) {
             file_put_contents($poFilePath, $cleanedContent);
@@ -752,15 +752,15 @@ class WeblateClient
         if ($content === false || $content === '') {
             return;
         }
-        
+
         $lines = explode("\n", $content);
         $cleanedLines = [];
         $headerFuzzyRemoved = false;
-        
+
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
             $trimmed = trim($line);
-            
+
             if (!$headerFuzzyRemoved && preg_match('/^#,\s*fuzzy/', $trimmed)) {
                 $lookAhead = $i + 1;
                 while ($lookAhead < count($lines)) {
@@ -776,16 +776,16 @@ class WeblateClient
                     break;
                 }
             }
-            
+
             $cleanedLines[] = $line;
         }
-        
+
         $cleanedContent = implode("\n", $cleanedLines);
         if ($cleanedContent !== $content) {
             file_put_contents($poFilePath, $cleanedContent);
         }
     }
-    
+
     /**
      * Upload PO file for a language
      *
@@ -830,7 +830,6 @@ class WeblateClient
                 );
 
                 return $response->getStatusCode() === 200;
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -840,7 +839,7 @@ class WeblateClient
                     $statusCode = $e->getResponse()->getStatusCode();
                     $errorBody = $e->getResponse()->getBody()->getContents();
                 }
-                
+
                 if ($statusCode === 404 && $attempt === 1) {
                     try {
                         $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
@@ -892,7 +891,7 @@ class WeblateClient
                 return;
             } catch (GuzzleException $e) {
                 $statusCode = method_exists($e, 'getResponse') && $e->getResponse() ? $e->getResponse()->getStatusCode() : $e->getCode();
-                
+
                 if ($statusCode === 404) {
                     try {
                         $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
@@ -903,12 +902,12 @@ class WeblateClient
                         return;
                     } catch (GuzzleException $createError) {
                         $createStatusCode = method_exists($createError, 'getResponse') && $createError->getResponse() ? $createError->getResponse()->getStatusCode() : $createError->getCode();
-                        
+
                         if ($createStatusCode === 503 && $attempt < $maxRetries) {
                             sleep($attempt * 5);
                             continue;
                         }
-                        
+
                         $errorBody = '';
                         if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
                             $errorBody = $createError->getResponse()->getBody()->getContents();
@@ -957,7 +956,6 @@ class WeblateClient
         $normalizedLanguage = str_replace('-', '_', $languageCode);
         $cleanHeaders = [];
         foreach ($headers as $h) {
-
             if (stripos($h, 'Plural-Forms:') === 0) {
                 continue;
             }
@@ -1087,7 +1085,6 @@ class WeblateClient
                 );
 
                 return $response->getBody()->getContents();
-
             } catch (GuzzleException $e) {
                 $attempt++;
 
@@ -1174,5 +1171,4 @@ class WeblateClient
             throw new Exception("Error getting component languages: " . $e->getMessage());
         }
     }
-
 }
