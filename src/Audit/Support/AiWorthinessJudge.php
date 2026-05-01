@@ -22,6 +22,9 @@ final class AiWorthinessJudge
     /** Cap env value size (bytes) before send + cache fingerprint. */
     private const AI_PLUGIN_CONTEXT_MAX_BYTES = 4000;
 
+    /** Cap each en_US back-translation gloss when appended to `reason` (bytes). */
+    private const EN_US_GLOSS_MAX_BYTES = 280;
+
     private const MODEL = 'gpt-4o-mini';
 
     /** USD per 1M tokens (approx list price; cap is still a safety rail). */
@@ -82,12 +85,14 @@ final class AiWorthinessJudge
 
         $userPayload = json_encode($userBody, JSON_UNESCAPED_UNICODE);
 
-        // The prompt is highly compressed using Caveman skill formatting to minimize token usage and optimize API efficiency.
-        $systemContent = 'PublishPress = WordPress publishing plugins (editorial, scheduling, permissions, revisions, authors, blocks, capabilities, checklists, series, statuses, shortlinks). '
-            . 'Task: judge gettext .po msgstr edits for these products. '
-            . 'ONLY valid JSON: {"judgments":[{"id":"...","worthy":true|false,"reason":"short"}]}. '
-            . 'worthy=true: real improvement—grammar/meaning/terminology/error vs old for msgid in locale; clearer WP/publishing wording OK. '
-            . 'worthy=false: cosmetic only (spacing, punctuation, trivial synonym). Unsure → worthy=true.';
+        // Caveman-compressed system prompt (fewer tokens, same rules).
+        $systemContent = 'PublishPress = WP publishing plugins (editorial, schedule, perms, revisions, authors, blocks, capabilities, checklists, series, statuses, shortlinks). '
+            . 'Judge gettext .po msgstr edits. '
+            . 'Each judgment: old_en_us + new_en_us = short en_US gloss of old/new msgstr (back-trans from user JSON locale) → show semantic drift vs msgid. '
+            . 'locale=en_US: gloss = trimmed msgstr; both fields still required. '
+            . 'ONLY JSON: {"judgments":[{"id":"...","worthy":true|false,"reason":"short","old_en_us":"...","new_en_us":"..."}]}. '
+            . 'worthy=true: real gain—grammar/meaning/terms/error vs old for msgid+locale; clearer WP/publish wording OK. '
+            . 'worthy=false: cosmetic (space/punct/trivial synonym). Unsure→worthy=true.';
         if ($pluginContext !== null) {
             $systemContent .= ' plugin_context in user JSON = maintainer blurb—weigh terms + domain fit.';
         }
@@ -153,6 +158,7 @@ final class AiWorthinessJudge
                     $worthy = (bool) $row['worthy'];
                 }
                 $reason = isset($row['reason']) ? (string) $row['reason'] : '';
+                $reason = self::appendEnUsGlossToReason($reason, $row);
                 $outMap[$id] = ['worthy' => $worthy, 'reason' => $reason];
             }
 
@@ -198,6 +204,27 @@ final class AiWorthinessJudge
         }
 
         return $ready;
+    }
+
+    /**
+     * @param array<string,mixed> $judgmentRow
+     */
+    private static function appendEnUsGlossToReason(string $reason, array $judgmentRow): string
+    {
+        $oldEn = isset($judgmentRow['old_en_us']) ? trim((string) $judgmentRow['old_en_us']) : '';
+        $newEn = isset($judgmentRow['new_en_us']) ? trim((string) $judgmentRow['new_en_us']) : '';
+        if ($oldEn === '' && $newEn === '') {
+            return $reason;
+        }
+        if (strlen($oldEn) > self::EN_US_GLOSS_MAX_BYTES) {
+            $oldEn = substr($oldEn, 0, self::EN_US_GLOSS_MAX_BYTES) . '...';
+        }
+        if (strlen($newEn) > self::EN_US_GLOSS_MAX_BYTES) {
+            $newEn = substr($newEn, 0, self::EN_US_GLOSS_MAX_BYTES) . '...';
+        }
+        $suffix = '[en_US gloss: ' . $oldEn . ' -> ' . $newEn . ']';
+
+        return trim($reason) === '' ? $suffix : trim($reason) . ' ' . $suffix;
     }
 
     private static function pluginContextFromEnv(): ?string
