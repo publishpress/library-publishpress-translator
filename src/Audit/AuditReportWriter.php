@@ -14,7 +14,7 @@ use PublishPress\Translations\Output;
 
 final class AuditReportWriter
 {
-    private const FILE_BASENAME = 'translation-audit';
+    private const FILE_BASENAME = 'translation-audit-report';
 
     /**
      * @param AuditFinding[] $findings
