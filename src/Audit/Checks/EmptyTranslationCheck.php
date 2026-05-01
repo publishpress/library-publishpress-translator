@@ -12,6 +12,7 @@ use PublishPress\Translations\Audit\AuditCheckInterface;
 use PublishPress\Translations\Audit\AuditContext;
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
 use PublishPress\Translations\Audit\Support\PoFile;
 
 final class EmptyTranslationCheck implements AuditCheckInterface
@@ -48,14 +49,29 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                         'Parse error: ' . $e->getMessage(),
                         null,
                         null,
-                        null
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PO_PARSE_ERROR
                     );
                     continue;
                 }
 
                 $w = $po->parseWarning();
                 if ($w !== null) {
-                    $findings[] = new AuditFinding($this->id(), 'warning', $rel, $locale, $w, null, null, null);
+                    $findings[] = new AuditFinding(
+                        $this->id(),
+                        'warning',
+                        $rel,
+                        $locale,
+                        $w,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PO_PARSE_WARNING
+                    );
                 }
 
                 $empty = $po->untranslatedEntries();
@@ -81,7 +97,8 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                     null,
                     null,
                     $detailLines,
-                    $summary
+                    $summary,
+                    IssueSlug::EMPTY_TRANSLATION
                 );
             }
         }

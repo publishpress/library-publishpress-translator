@@ -12,6 +12,7 @@ use PublishPress\Translations\Audit\AuditCheckInterface;
 use PublishPress\Translations\Audit\AuditContext;
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
 use PublishPress\Translations\Audit\Support\PoFile;
 
 final class PotMismatchCheck implements AuditCheckInterface
@@ -42,7 +43,10 @@ final class PotMismatchCheck implements AuditCheckInterface
                 'No .pot files in languages/.',
                 null,
                 null,
-                null
+                null,
+                null,
+                null,
+                IssueSlug::NO_POT_IN_LANGUAGES
             );
 
             return $findings;
@@ -63,7 +67,10 @@ final class PotMismatchCheck implements AuditCheckInterface
                     'Parse error: ' . $e->getMessage(),
                     null,
                     null,
-                    null
+                    null,
+                    null,
+                    null,
+                    IssueSlug::POT_PARSE_ERROR
                 );
                 continue;
             }
@@ -88,7 +95,10 @@ final class PotMismatchCheck implements AuditCheckInterface
                         'Parse error: ' . $e->getMessage(),
                         null,
                         null,
-                        null
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PO_PARSE_ERROR
                     );
                     continue;
                 }
@@ -125,7 +135,8 @@ final class PotMismatchCheck implements AuditCheckInterface
                         null,
                         null,
                         $detailOrphan,
-                        $summaryOrphan
+                        $summaryOrphan,
+                        IssueSlug::ORPHAN_MSGID
                     );
                 }
 
@@ -151,7 +162,8 @@ final class PotMismatchCheck implements AuditCheckInterface
                         null,
                         null,
                         $detailMiss,
-                        $summaryMiss
+                        $summaryMiss,
+                        IssueSlug::MISSED_MSGID
                     );
                 }
             }

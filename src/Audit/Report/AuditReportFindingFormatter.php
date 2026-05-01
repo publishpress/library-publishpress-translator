@@ -45,7 +45,7 @@ final class AuditReportFindingFormatter
         if ($f->language !== '') {
             $loc .= ' [' . $f->language . ']';
         }
-        $line = '[' . $f->severity . '] ' . $f->checkId . ' ' . $loc . ' — ' . $messageBody;
+        $line = '[' . $f->severity . '] ' . $f->resolvedIssueSlug() . ' ' . $loc . ' — ' . $messageBody;
         if ($f->actionTaken !== null && $f->actionTaken !== '') {
             $line .= ' [' . $f->actionTaken . ']';
         }

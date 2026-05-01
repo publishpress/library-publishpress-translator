@@ -12,6 +12,7 @@ use PublishPress\Translations\Audit\AuditCheckInterface;
 use PublishPress\Translations\Audit\AuditContext;
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
 use PublishPress\Translations\Audit\Support\PoFile;
 
 final class PoVersionCheck implements AuditCheckInterface
@@ -39,7 +40,10 @@ final class PoVersionCheck implements AuditCheckInterface
                 'Plugin version not detected from PHP headers — skipping version check.',
                 null,
                 null,
-                null
+                null,
+                null,
+                null,
+                IssueSlug::PO_VERSION_PLUGIN_UNKNOWN
             );
 
             return $findings;
@@ -64,7 +68,10 @@ final class PoVersionCheck implements AuditCheckInterface
                         'Parse error: ' . $e->getMessage(),
                         null,
                         null,
-                        null
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PO_PARSE_ERROR
                     );
                     continue;
                 }
@@ -83,7 +90,8 @@ final class PoVersionCheck implements AuditCheckInterface
                         null,
                         null,
                         null,
-                        $summary
+                        $summary,
+                        IssueSlug::PROJECT_ID_VERSION_MISSING
                     );
                     continue;
                 }
@@ -98,7 +106,10 @@ final class PoVersionCheck implements AuditCheckInterface
                         'Could not parse version from Project-Id-Version: ' . $rawHeader,
                         $rawHeader,
                         $want,
-                        null
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PROJECT_ID_VERSION_UNPARSEABLE
                     );
                     continue;
                 }
@@ -117,7 +128,10 @@ final class PoVersionCheck implements AuditCheckInterface
                         'PO claims newer version (' . $poVer . ') than plugin (' . $pluginV . ') — not changed by this audit.',
                         $rawHeader,
                         null,
-                        null
+                        null,
+                        null,
+                        null,
+                        IssueSlug::PROJECT_ID_VERSION_NEWER_THAN_PLUGIN
                     );
                     continue;
                 }
@@ -134,7 +148,8 @@ final class PoVersionCheck implements AuditCheckInterface
                     $want,
                     null,
                     null,
-                    $summary
+                    $summary,
+                    IssueSlug::PROJECT_ID_VERSION_OUTDATED
                 );
             }
         }

@@ -49,6 +49,13 @@ final class AuditFinding
     public $reportDetailLines;
 
     /**
+     * Machine-readable issue id (e.g. empty-translation, orphan-msgid) for reports and filtering.
+     *
+     * @var string|null
+     */
+    public $issueSlug;
+
+    /**
      * @param string[]|null $reportDetailLines
      */
     public function __construct(
@@ -61,7 +68,8 @@ final class AuditFinding
         ?string $after = null,
         ?string $actionTaken = null,
         ?array $reportDetailLines = null,
-        ?string $reportSummary = null
+        ?string $reportSummary = null,
+        ?string $issueSlug = null
     ) {
         $this->checkId            = $checkId;
         $this->severity           = $severity;
@@ -73,6 +81,19 @@ final class AuditFinding
         $this->actionTaken        = $actionTaken;
         $this->reportDetailLines  = $reportDetailLines;
         $this->reportSummary      = $reportSummary;
+        $this->issueSlug          = $issueSlug;
+    }
+
+    /**
+     * Non-empty slug for tables and plain-text reports.
+     */
+    public function resolvedIssueSlug(): string
+    {
+        if ($this->issueSlug !== null && $this->issueSlug !== '') {
+            return $this->issueSlug;
+        }
+
+        return IssueSlug::fallbackForCheckId($this->checkId);
     }
 
     /**

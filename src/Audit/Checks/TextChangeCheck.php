@@ -12,6 +12,7 @@ use PublishPress\Translations\Audit\AuditCheckInterface;
 use PublishPress\Translations\Audit\AuditContext;
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
 use PublishPress\Translations\Audit\Support\AiWorthinessJudge;
 use PublishPress\Translations\Audit\Support\DiffPrefilter;
 use PublishPress\Translations\Audit\Support\GitDiff;
@@ -45,7 +46,10 @@ final class TextChangeCheck implements AuditCheckInterface
                 'Git not available or not a repository — skipping diff worthiness check.',
                 null,
                 null,
-                null
+                null,
+                null,
+                null,
+                IssueSlug::TEXT_CHANGE_NO_GIT
             );
 
             return $findings;
@@ -79,7 +83,10 @@ final class TextChangeCheck implements AuditCheckInterface
                 'No changed .po files in languages/ for this audit scope.',
                 null,
                 null,
-                null
+                null,
+                null,
+                null,
+                IssueSlug::TEXT_CHANGE_NO_CHANGED_PO
             );
 
             return $findings;
@@ -108,7 +115,10 @@ final class TextChangeCheck implements AuditCheckInterface
                     'File missing at ' . $ctx->gitBase() . ' (new file?) — cannot diff against HEAD.',
                     null,
                     null,
-                    null
+                    null,
+                    null,
+                    null,
+                    IssueSlug::TEXT_CHANGE_MISSING_AT_BASE
                 );
                 continue;
             }
@@ -125,14 +135,29 @@ final class TextChangeCheck implements AuditCheckInterface
                     'Parse error: ' . $e->getMessage(),
                     null,
                     null,
-                    null
+                    null,
+                    null,
+                    null,
+                    IssueSlug::PO_PARSE_ERROR
                 );
                 continue;
             }
 
             $w = $workPo->parseWarning();
             if ($w !== null) {
-                $findings[] = new AuditFinding($this->id(), 'warning', $rel, $locale, $w, null, null, null);
+                $findings[] = new AuditFinding(
+                    $this->id(),
+                    'warning',
+                    $rel,
+                    $locale,
+                    $w,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    IssueSlug::PO_PARSE_WARNING
+                );
             }
 
             $changes = self::collectChangedEntries($headPo, $workPo);
@@ -238,7 +263,8 @@ final class TextChangeCheck implements AuditCheckInterface
                     $row['new'],
                     'unjudged (no API key)',
                     self::translationDiffReportLines($chg),
-                    'OPENAI_API_KEY missing — cannot judge translation change'
+                    'OPENAI_API_KEY missing — cannot judge translation change',
+                    IssueSlug::TRANSLATION_AI_UNJUDGED
                 );
             }
             $pending = [];
@@ -259,7 +285,8 @@ final class TextChangeCheck implements AuditCheckInterface
                     $row['new'],
                     'unjudged (cost cap)',
                     self::translationDiffReportLines($chg),
-                    'Cost cap reached — not judged'
+                    'Cost cap reached — not judged',
+                    IssueSlug::TRANSLATION_AI_COST_CAP
                 );
             }
             $pending = [];
@@ -340,7 +367,8 @@ final class TextChangeCheck implements AuditCheckInterface
                 $chg['new'],
                 'kept',
                 self::translationDiffReportLines($chg),
-                $msg
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_WORTHY
             );
         }
 
@@ -357,7 +385,8 @@ final class TextChangeCheck implements AuditCheckInterface
                 $chg['new'],
                 'none (report mode)',
                 self::translationDiffReportLines($chg),
-                $msg
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_NOT_WORTHY
             );
         }
 
@@ -386,7 +415,8 @@ final class TextChangeCheck implements AuditCheckInterface
                     $chg['new'],
                     'quit',
                     self::translationDiffReportLines($chg),
-                    $msg
+                    $msg,
+                    IssueSlug::TRANSLATION_CHANGE_QUIT
                 );
             }
             $doRevert = $act === 'revert';
@@ -405,7 +435,8 @@ final class TextChangeCheck implements AuditCheckInterface
                 $chg['new'],
                 'kept',
                 self::translationDiffReportLines($chg),
-                $msg
+                $msg,
+                IssueSlug::TRANSLATION_CHANGE_KEPT
             );
         }
 
@@ -425,6 +456,10 @@ final class TextChangeCheck implements AuditCheckInterface
 
         $msg = 'Not worth keeping: ' . $reason;
 
+        $issue = $action === 'reverted'
+            ? IssueSlug::TRANSLATION_CHANGE_REVERTED
+            : IssueSlug::TRANSLATION_CHANGE_REVERT_FAILED;
+
         return new AuditFinding(
             CheckId::TEXT_CHANGE,
             'warning',
@@ -435,7 +470,8 @@ final class TextChangeCheck implements AuditCheckInterface
             $chg['new'],
             $action,
             self::translationDiffReportLines($chg),
-            $msg
+            $msg,
+            $issue
         );
     }
 

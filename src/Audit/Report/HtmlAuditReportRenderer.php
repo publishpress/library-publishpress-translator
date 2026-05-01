@@ -57,7 +57,7 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
                 foreach ($list as $f) {
                     $rows .= self::findingRow($f);
                 }
-                $body = '<table class="findings-table"><thead><tr><th>Severity</th><th>File</th><th>Language</th><th>Summary</th><th>Action</th></tr></thead>'
+                $body = '<table class="findings-table"><thead><tr><th>Severity</th><th>File</th><th>Language</th><th>Issue</th><th>Summary</th><th>Action</th></tr></thead>'
                     . '<tbody>' . $rows . '</tbody></table>';
             }
 
@@ -186,6 +186,7 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             . '<td>' . self::h($f->severity) . '</td>'
             . '<td>' . self::h($f->file) . '</td>'
             . '<td>' . self::h($f->language) . '</td>'
+            . '<td><code>' . self::h($f->resolvedIssueSlug()) . '</code></td>'
             . '<td>' . $msgCell . '</td>'
             . '<td>' . self::h((string) $f->actionTaken) . '</td>'
             . "</tr>\n";

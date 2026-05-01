@@ -166,7 +166,7 @@ final class Auditor
             $loc .= ' [' . $f->language . ']';
         }
 
-        $line = '[' . $f->severity . '] ' . $f->checkId . ' ' . $loc . ' — ' . $f->message;
+        $line = '[' . $f->severity . '] ' . $f->resolvedIssueSlug() . ' ' . $loc . ' — ' . $f->message;
         if ($f->actionTaken !== null && $f->actionTaken !== '') {
             $line .= ' [' . $f->actionTaken . ']';
         }
