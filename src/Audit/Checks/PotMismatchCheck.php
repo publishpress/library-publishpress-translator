@@ -101,38 +101,59 @@ final class PotMismatchCheck implements AuditCheckInterface
                     continue;
                 }
 
-                $detailLines = [];
-                $detailLines[] = '--- Orphan msgids (.po keys not in .pot) — ' . count($orphan) . ' ---';
-                foreach (array_keys($orphan) as $k) {
-                    $detailLines[] = str_replace("\004", '|', $k);
-                }
-                $detailLines[] = '--- Missing msgids (.pot keys not in .po) — ' . count($miss) . ' ---';
-                foreach (array_keys($miss) as $k) {
-                    $detailLines[] = str_replace("\004", '|', $k);
+                $potName = basename($potPath);
+
+                if ($orphan !== []) {
+                    $detailOrphan = [];
+                    foreach (array_keys($orphan) as $k) {
+                        $detailOrphan[] = str_replace("\004", '|', $k);
+                    }
+                    $summaryOrphan = sprintf(
+                        'Orphan msgids (%d) vs %s — .po keys not in .pot',
+                        count($orphan),
+                        $potName
+                    );
+                    $msgOrphan = sprintf('Orphan msgids vs %s: %d', $potName, count($orphan))
+                        . ' | sample: ' . self::sampleKeys($orphan, 5);
+                    $findings[] = new AuditFinding(
+                        $this->id(),
+                        'warning',
+                        $relPo,
+                        $locale,
+                        $msgOrphan,
+                        null,
+                        null,
+                        null,
+                        $detailOrphan,
+                        $summaryOrphan
+                    );
                 }
 
-                $summary = sprintf(
-                    'vs %s: orphans=%d missing=%d',
-                    basename($potPath),
-                    count($orphan),
-                    count($miss)
-                );
-                $msg = $summary
-                    . ' | orphan sample: ' . self::sampleKeys($orphan, 5)
-                    . ' | missing sample: ' . self::sampleKeys($miss, 5);
-
-                $findings[] = new AuditFinding(
-                    $this->id(),
-                    'warning',
-                    $relPo,
-                    $locale,
-                    $msg,
-                    null,
-                    null,
-                    null,
-                    $detailLines,
-                    $summary
-                );
+                if ($miss !== []) {
+                    $detailMiss = [];
+                    foreach (array_keys($miss) as $k) {
+                        $detailMiss[] = str_replace("\004", '|', $k);
+                    }
+                    $summaryMiss = sprintf(
+                        'Missing msgids (%d) vs %s — .pot keys not in .po',
+                        count($miss),
+                        $potName
+                    );
+                    $msgMiss = sprintf('Missing msgids vs %s: %d', $potName, count($miss))
+                        . ' | sample: ' . self::sampleKeys($miss, 5);
+                    $findings[] = new AuditFinding(
+                        $this->id(),
+                        'warning',
+                        $relPo,
+                        $locale,
+                        $msgMiss,
+                        null,
+                        null,
+                        null,
+                        $detailMiss,
+                        $summaryMiss
+                    );
+                }
             }
         }
 
