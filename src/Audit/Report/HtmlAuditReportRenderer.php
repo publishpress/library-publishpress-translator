@@ -69,6 +69,8 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             . 'table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;vertical-align:top}'
             . 'th{background:#f4f4f4}.meta{margin-bottom:1rem}'
             . '.detail-block{margin-top:.35rem;display:flex;flex-direction:column;gap:.35rem}'
+            . 'h4.detail-heading{margin:.75rem 0 .35rem;font-size:1rem;font-weight:600;color:#222;border-bottom:1px solid #ccc;padding-bottom:.2rem}'
+            . 'h4.detail-heading:first-child{margin-top:0}'
             . 'pre.detail{margin:0;white-space:pre-wrap;word-break:break-word;font-size:.9rem;background:#f9f9f9;padding:.5rem;border:1px solid #e0e0e0}'
             . '.tab-shell{margin-top:1.25rem}.tab-bar{display:flex;flex-wrap:wrap;gap:.25rem;border-bottom:1px solid #ccc;margin-bottom:0}'
             . '.tab-btn{padding:.5rem .85rem;background:#eee;border:1px solid #ccc;border-bottom:none;cursor:pointer;font:inherit;border-radius:4px 4px 0 0}'
@@ -177,6 +179,13 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
         if ($details !== []) {
             $msgCell .= '<div class="detail-block">';
             foreach ($details as $line) {
+                $sectionTitle = $f->checkId === CheckId::POT_MISMATCH
+                    ? self::potMismatchDetailSectionTitle($line)
+                    : null;
+                if ($sectionTitle !== null) {
+                    $msgCell .= '<h4 class="detail-heading">' . self::h($sectionTitle) . '</h4>';
+                    continue;
+                }
                 $msgCell .= '<pre class="detail">' . self::h($line) . '</pre>';
             }
             $msgCell .= '</div>';
@@ -189,6 +198,19 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             . '<td>' . $msgCell . '</td>'
             . '<td>' . self::h((string) $f->actionTaken) . '</td>'
             . "</tr>\n";
+    }
+
+    /**
+     * POT mismatch check uses "--- Title — N ---" lines to separate orphan vs missing key lists.
+     * Returns the inner title text for HTML headings, or null if the line is a normal detail line.
+     */
+    private static function potMismatchDetailSectionTitle(string $line): ?string
+    {
+        if (preg_match('/^---\s*(.+)\s---$/u', $line, $m)) {
+            return $m[1];
+        }
+
+        return null;
     }
 
     private static function h(string $s): string
