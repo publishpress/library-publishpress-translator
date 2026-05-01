@@ -11,6 +11,7 @@ namespace PublishPress\Translations;
 use Exception;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
+use PublishPress\Translations\Support\TranslationOverrides;
 
 class Translator
 {
@@ -965,41 +966,6 @@ class Translator
     }
 
     /**
-     * Parse a TRANSLATION_OVERRIDES env var value into a flat override map.
-     *
-     * @param string $envValue Raw env var value
-     * @return array Override map
-     */
-    private function parseTranslationOverridesEnv($envValue)
-    {
-        $overrides = [];
-
-        if (!is_string($envValue) || trim($envValue) === '') {
-            return $overrides;
-        }
-
-        $entries = array_filter(array_map('trim', explode(',', $envValue)));
-
-        foreach ($entries as $entry) {
-            $equalsIndex = strpos($entry, '=');
-            if ($equalsIndex !== false && $equalsIndex > 0) {
-                $source = trim(substr($entry, 0, $equalsIndex));
-                $target = trim(substr($entry, $equalsIndex + 1));
-                if ($source !== '' && $target !== '') {
-                    $overrides[$source] = $target;
-                }
-            } else {
-                $word = trim($entry);
-                if ($word !== '') {
-                    $overrides[$word] = $word;
-                }
-            }
-        }
-
-        return $overrides;
-    }
-
-    /**
      * Build the translation overrides for all target languages.
      *
      * @return array Two keys
@@ -1010,7 +976,7 @@ class Translator
 
         $envGlobal = getenv('TRANSLATION_OVERRIDES');
         if ($envGlobal !== false && trim($envGlobal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
+            $parsed = TranslationOverrides::parseEnvValue($envGlobal);
             foreach ($parsed as $source => $target) {
                 $global[$source] = $target;
             }
@@ -1021,7 +987,7 @@ class Translator
             $envKey = 'TRANSLATION_OVERRIDES_' . $lang;
             $envVal = getenv($envKey);
             if ($envVal !== false && trim($envVal) !== '') {
-                $perLanguage[$lang] = $this->parseTranslationOverridesEnv($envVal);
+                $perLanguage[$lang] = TranslationOverrides::parseEnvValue($envVal);
             }
         }
 
@@ -1111,26 +1077,7 @@ class Translator
      */
     private function getOverridesForLanguage($language)
     {
-        $overrides = [];
-
-        $envGlobal = getenv('TRANSLATION_OVERRIDES');
-        if ($envGlobal !== false && trim($envGlobal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envGlobal);
-            foreach ($parsed as $source => $target) {
-                $overrides[$source] = $target;
-            }
-        }
-
-        $envKey = 'TRANSLATION_OVERRIDES_' . $language;
-        $envVal = getenv($envKey);
-        if ($envVal !== false && trim($envVal) !== '') {
-            $parsed = $this->parseTranslationOverridesEnv($envVal);
-            foreach ($parsed as $source => $target) {
-                $overrides[$source] = $target;
-            }
-        }
-
-        return $overrides;
+        return TranslationOverrides::mapForLanguage($language);
     }
 
     /**

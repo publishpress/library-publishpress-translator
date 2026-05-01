@@ -14,6 +14,7 @@ use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
 use PublishPress\Translations\Audit\IssueSlug;
 use PublishPress\Translations\Audit\Support\PoFile;
+use PublishPress\Translations\Support\TranslationOverrides;
 
 final class EmptyTranslationCheck implements AuditCheckInterface
 {
@@ -75,6 +76,7 @@ final class EmptyTranslationCheck implements AuditCheckInterface
                 }
 
                 $empty = $po->untranslatedEntries();
+                $empty = self::withoutTranslationOverrideMsgids($empty, TranslationOverrides::mapForLanguage($locale));
                 if ($empty === []) {
                     continue;
                 }
@@ -104,6 +106,33 @@ final class EmptyTranslationCheck implements AuditCheckInterface
         }
 
         return $findings;
+    }
+
+    /**
+     * Drop entries whose msgid exactly matches a TRANSLATION_OVERRIDES source for this locale
+     * (same keys as Translator::getOverridesForLanguage): those strings are intentionally
+     * fixed to a known target (often msgid === msgstr) and must not count as missing translations.
+     *
+     * @param array<int,\Gettext\Translation> $entries
+     * @param array<string, string>           $overrideMap
+     *
+     * @return array<int,\Gettext\Translation>
+     */
+    private static function withoutTranslationOverrideMsgids(array $entries, array $overrideMap): array
+    {
+        if ($entries === [] || $overrideMap === []) {
+            return $entries;
+        }
+
+        $out = [];
+        foreach ($entries as $t) {
+            if (array_key_exists($t->getOriginal(), $overrideMap)) {
+                continue;
+            }
+            $out[] = $t;
+        }
+
+        return $out;
     }
 
     /**
