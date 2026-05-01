@@ -1,14 +1,14 @@
 <?php
 
 /**
- * Surgical line edits on .po files (avoid full PoGenerator rewrite).
+ * Surgical line edits on .po files (avoid full PO rewrite).
  *
  * @package PublishPress\Translations\Audit\Support
  */
 
 namespace PublishPress\Translations\Audit\Support;
 
-use Gettext\Loader\PoLoader;
+use Gettext\Extractors\Po as PoExtractor;
 use Gettext\Translation;
 use RuntimeException;
 
@@ -18,7 +18,7 @@ final class PoEntrySplicer
      * Replace msgstr / msgstr[n] for one entry identified by context + msgid.
      *
      * @param string|null $plural msgid_plural text if plural entry
-     * @param string[]     $pluralMsgstrs msgstr[1..] forms (msgstr[0] is $singularMsgstr)
+     * @param string[]    $pluralMsgstrs msgstr[1..] forms (msgstr[0] is $singularMsgstr)
      */
     public static function replaceEntryTranslations(
         string $path,
@@ -37,10 +37,11 @@ final class PoEntrySplicer
         $norm    = str_replace(["\r\n", "\r"], "\n", $raw);
         $lines   = explode("\n", $norm);
 
-        $targetId = Translation::create($context, $msgid)->getId();
+        $ctx      = $context === null ? '' : $context;
+        $targetId = Translation::generateId($ctx, $msgid);
 
         $logical = self::buildLogicalLines($lines);
-        $state    = self::scanForEntry($logical, $targetId, $plural !== null && $plural !== '');
+        $state   = self::scanForEntry($logical, $targetId, $plural !== null && $plural !== '');
 
         if ($state === null) {
             throw new RuntimeException("Entry not found in {$path} for msgid splice.");
@@ -76,9 +77,9 @@ final class PoEntrySplicer
         $hadCrlf = strpos($raw, "\r\n") !== false;
         $norm    = str_replace(["\r\n", "\r"], "\n", $raw);
 
-        $frag  = self::escapeHeaderValueFragment($newHeaderValue);
-        $repl  = '"Project-Id-Version: ' . $frag . '\\n"';
-        $out   = preg_replace('/"Project-Id-Version:.*?\\\\n"/s', $repl, $norm, 1);
+        $frag = self::escapeHeaderValueFragment($newHeaderValue);
+        $repl = '"Project-Id-Version: ' . $frag . '\\n"';
+        $out  = preg_replace('/"Project-Id-Version:.*?\\\\n"/s', $repl, $norm, 1);
         if ($out === null || $out === $norm) {
             $out = preg_replace('/"Project-Id-Version:[^"]*"/', $repl, $norm, 1);
         }
@@ -155,12 +156,12 @@ final class PoEntrySplicer
      */
     private static function scanForEntry(array $logical, string $targetId, bool $expectPlural): ?array
     {
-        $translation      = Translation::create(null, '');
+        $translation      = new Translation('', '');
         $disabled         = false;
-        $prefix             = '';
-        $msgstrStart        = null;
-        $msgstrEnd          = null;
-        $inTargetMsgstr     = false;
+        $prefix           = '';
+        $msgstrStart      = null;
+        $msgstrEnd        = null;
+        $inTargetMsgstr   = false;
 
         foreach ($logical as $item) {
             $line = $item['line'];
@@ -176,7 +177,7 @@ final class PoEntrySplicer
                 $inTargetMsgstr = false;
                 $msgstrStart    = null;
                 $msgstrEnd      = null;
-                $translation    = Translation::create(null, '');
+                $translation    = new Translation('', '');
                 $disabled       = false;
                 $prefix         = '';
                 continue;
@@ -191,12 +192,12 @@ final class PoEntrySplicer
 
             if ($key === '#~') {
                 $disabled = true;
-                $parts    = preg_split('/\s+/', $data, 2);
+                $parts     = preg_split('/\s+/', $data, 2);
                 if ($parts === false) {
                     $parts = ['', ''];
                 }
-                $key  = $parts[0] ?? '';
-                $data = $parts[1] ?? '';
+                $key    = $parts[0] ?? '';
+                $data   = $parts[1] ?? '';
                 $prefix = '#~ ';
             }
 
@@ -211,18 +212,18 @@ final class PoEntrySplicer
                 case '#:':
                     break;
                 case 'msgctxt':
-                    $translation = $translation->withContext(PoLoader::decode($data));
+                    $translation = $translation->getClone(PoExtractor::convertString($data), null);
                     break;
                 case 'msgid':
-                    $translation = $translation->withOriginal(PoLoader::decode($data));
+                    $translation = $translation->getClone(null, PoExtractor::convertString($data));
                     break;
                 case 'msgid_plural':
-                    $translation->setPlural(PoLoader::decode($data));
+                    $translation->setPlural(PoExtractor::convertString($data));
                     break;
                 default:
                     if ($key === 'msgstr' || strpos($key, 'msgstr[') === 0) {
                         if ($translation->getId() === $targetId && !$disabled) {
-                            $pluralOk = ($translation->getPlural() !== null && $translation->getPlural() !== '');
+                            $pluralOk = $translation->hasPlural();
                             if ($expectPlural !== $pluralOk) {
                                 break;
                             }
@@ -285,8 +286,8 @@ final class PoEntrySplicer
 
     private static function atomicPut(string $path, string $contents): void
     {
-        $dir  = dirname($path);
-        $tmp  = $dir . '/.' . basename($path) . '.' . uniqid('tmp', true);
+        $dir = dirname($path);
+        $tmp = $dir . '/.' . basename($path) . '.' . uniqid('tmp', true);
         if (@file_put_contents($tmp, $contents) === false) {
             throw new RuntimeException("Cannot write temp file {$tmp}");
         }

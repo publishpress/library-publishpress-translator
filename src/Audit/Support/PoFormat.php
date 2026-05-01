@@ -1,14 +1,14 @@
 <?php
 
 /**
- * PO string encoding / line building (mirrors gettext PoGenerator rules).
+ * PO string encoding / line building (gettext v4 Generators\Po).
  *
  * @package PublishPress\Translations\Audit\Support
  */
 
 namespace PublishPress\Translations\Audit\Support;
 
-use Gettext\Generator\PoGenerator;
+use Gettext\Generators\Po as PoGenerator;
 
 final class PoFormat
 {
@@ -17,12 +17,12 @@ final class PoFormat
      */
     public static function directiveLines(string $prefix, string $name, string $value): array
     {
-        $lines   = [];
+        $lines    = [];
         $newLines = explode("\n", $value);
-        $total   = count($newLines);
+        $total    = count($newLines);
 
         if ($total === 1) {
-            $lines[] = sprintf('%s%s %s', $prefix, $name, PoGenerator::encode($newLines[0]));
+            $lines[] = sprintf('%s%s %s', $prefix, $name, PoGenerator::convertString($newLines[0]));
 
             return $lines;
         }
@@ -35,7 +35,7 @@ final class PoFormat
                 $line .= "\n";
             }
 
-            $lines[] = PoGenerator::encode($line);
+            $lines[] = PoGenerator::convertString($line);
         }
 
         return $lines;

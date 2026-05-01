@@ -428,7 +428,7 @@ final class TextChangeCheck implements AuditCheckInterface
         $i   = 0;
 
         foreach ($workPo->activeTranslations() as $wt) {
-            $ht = $headPo->translations()->find($wt->getContext(), $wt->getOriginal());
+            $ht = $headPo->find($wt->getContext(), $wt->getOriginal());
             $old = $ht === null ? '' : PoFile::serializeTranslation($ht);
             $new = PoFile::serializeTranslation($wt);
             if ($old === $new) {

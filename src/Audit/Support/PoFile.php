@@ -1,7 +1,11 @@
 <?php
 
 /**
- * Read-only .po/.pot wrapper around gettext loaders (AST, no regex on entries).
+ * Read-only .po/.pot wrapper around gettext v4 (Translations::fromPoString).
+ *
+ * gettext/gettext is constrained to ^4.8 so this library coexists with
+ * wp-cli/i18n-command (which requires gettext ^4.8). The --audit-strict-po flag
+ * is reserved: strict parsing needs gettext v5+ and is not applied on v4.
  *
  * @todo Migrate Translator regex PO parsing to this wrapper.
  *
@@ -10,11 +14,8 @@
 
 namespace PublishPress\Translations\Audit\Support;
 
-use Gettext\Loader\PoLoader;
-use Gettext\Loader\StrictPoLoader;
 use Gettext\Translation;
 use Gettext\Translations;
-use Throwable;
 
 final class PoFile
 {
@@ -29,8 +30,8 @@ final class PoFile
 
     private function __construct(Translations $translations, bool $parsedWithStrictLoader, ?string $parseWarning)
     {
-        $this->translations          = $translations;
-        $this->parsedWithStrictLoader = $parsedWithStrictLoader;
+        $this->translations           = $translations;
+        $this->parsedWithStrictLoader  = $parsedWithStrictLoader;
         $this->parseWarning            = $parseWarning;
     }
 
@@ -48,18 +49,11 @@ final class PoFile
     {
         $warning = null;
         if ($strictFirst) {
-            try {
-                $loader = new StrictPoLoader();
-                $t      = $loader->loadString($contents);
-
-                return new self($t, true, null);
-            } catch (Throwable $e) {
-                $warning = 'Strict PO parse failed; used lenient PoLoader (' . $e->getMessage() . ').';
-            }
+            $warning = 'Strict PO parsing (--audit-strict-po) requires gettext/gettext ^5; '
+                . 'this project uses gettext v4 for wp-cli compatibility — using standard parser.';
         }
 
-        $loader = new PoLoader();
-        $t      = $loader->loadString($contents);
+        $t = Translations::fromPoString($contents);
 
         return new self($t, false, $warning);
     }
@@ -67,6 +61,17 @@ final class PoFile
     public function translations(): Translations
     {
         return $this->translations;
+    }
+
+    /**
+     * Find translation; null if missing (gettext v4 find() returns false).
+     */
+    public function find(?string $context, string $original): ?Translation
+    {
+        $ctx = $context === null ? '' : $context;
+        $t   = $this->translations->find($ctx, $original);
+
+        return $t === false ? null : $t;
     }
 
     public function parsedWithStrictLoader(): bool
@@ -79,12 +84,9 @@ final class PoFile
         return $this->parseWarning;
     }
 
-    /**
-     * Header map (Project-Id-Version, etc.).
-     */
     public function header(string $name): ?string
     {
-        return $this->translations->getHeaders()->get($name);
+        return $this->translations->getHeader($name);
     }
 
     /**
@@ -134,7 +136,7 @@ final class PoFile
     {
         $out = [];
         foreach ($this->activeTranslations() as $t) {
-            if ($t->getFlags()->has('fuzzy')) {
+            if (in_array('fuzzy', $t->getFlags(), true)) {
                 continue;
             }
             if ($this->entryHasEmptyTranslation($t)) {
@@ -152,7 +154,7 @@ final class PoFile
     {
         $out = [];
         foreach ($this->activeTranslations() as $t) {
-            if ($t->getFlags()->has('fuzzy')) {
+            if (in_array('fuzzy', $t->getFlags(), true)) {
                 $out[] = $t;
             }
         }
@@ -162,9 +164,9 @@ final class PoFile
 
     private function entryHasEmptyTranslation(Translation $t): bool
     {
-        if ($t->getPlural() !== null && $t->getPlural() !== '') {
+        if ($t->hasPlural()) {
             $forms = $t->getPluralTranslations();
-            if ($t->getTranslation() === null || $t->getTranslation() === '') {
+            if (!$t->hasTranslation()) {
                 return true;
             }
             foreach ($forms as $v) {
@@ -176,7 +178,7 @@ final class PoFile
             return false;
         }
 
-        return $t->getTranslation() === null || $t->getTranslation() === '';
+        return !$t->hasTranslation();
     }
 
     /**
@@ -184,7 +186,7 @@ final class PoFile
      */
     public static function serializeTranslation(Translation $t): string
     {
-        if ($t->getPlural() !== null && $t->getPlural() !== '') {
+        if ($t->hasPlural()) {
             $parts   = [];
             $parts[] = (string) $t->getTranslation();
             foreach ($t->getPluralTranslations() as $p) {

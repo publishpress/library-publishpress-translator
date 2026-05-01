@@ -4,32 +4,39 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "60efa7cb0ca5a3ea03e947222e5a29d1",
+    "content-hash": "82b76bd6b963c9a6b5bf8b9250488142",
     "packages": [
         {
             "name": "gettext/gettext",
-            "version": "v5.7.3",
+            "version": "v4.8.12",
             "source": {
                 "type": "git",
                 "url": "https://github.com/php-gettext/Gettext.git",
-                "reference": "95820f020e4f2f05e0bbaa5603e4c6ec3edc50f1"
+                "reference": "11af89ee6c087db3cf09ce2111a150bca5c46e12"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/php-gettext/Gettext/zipball/95820f020e4f2f05e0bbaa5603e4c6ec3edc50f1",
-                "reference": "95820f020e4f2f05e0bbaa5603e4c6ec3edc50f1",
+                "url": "https://api.github.com/repos/php-gettext/Gettext/zipball/11af89ee6c087db3cf09ce2111a150bca5c46e12",
+                "reference": "11af89ee6c087db3cf09ce2111a150bca5c46e12",
                 "shasum": ""
             },
             "require": {
                 "gettext/languages": "^2.3",
-                "php": "^7.2|^8.0"
+                "php": ">=5.4.0"
             },
             "require-dev": {
-                "brick/varexporter": "^0.3.5",
-                "friendsofphp/php-cs-fixer": "^3.2",
-                "oscarotero/php-cs-fixer-config": "^2.0",
-                "phpunit/phpunit": "^8.0|^9.0",
-                "squizlabs/php_codesniffer": "^3.0"
+                "illuminate/view": "^5.0.x-dev",
+                "phpunit/phpunit": "^4.8|^5.7|^6.5",
+                "squizlabs/php_codesniffer": "^3.0",
+                "symfony/yaml": "~2",
+                "twig/extensions": "*",
+                "twig/twig": "^1.31|^2.0"
+            },
+            "suggest": {
+                "illuminate/view": "Is necessary if you want to use the Blade extractor",
+                "symfony/yaml": "Is necessary if you want to use the Yaml extractor/generator",
+                "twig/extensions": "Is necessary if you want to use the Twig extractor",
+                "twig/twig": "Is necessary if you want to use the Twig extractor"
             },
             "type": "library",
             "autoload": {
@@ -50,7 +57,7 @@
                 }
             ],
             "description": "PHP gettext manager",
-            "homepage": "https://github.com/php-gettext/Gettext",
+            "homepage": "https://github.com/oscarotero/Gettext",
             "keywords": [
                 "JS",
                 "gettext",
@@ -61,8 +68,8 @@
             ],
             "support": {
                 "email": "oom@oscarotero.com",
-                "issues": "https://github.com/php-gettext/Gettext/issues",
-                "source": "https://github.com/php-gettext/Gettext/tree/v5.7.3"
+                "issues": "https://github.com/oscarotero/Gettext/issues",
+                "source": "https://github.com/php-gettext/Gettext/tree/v4.8.12"
             },
             "funding": [
                 {
@@ -78,7 +85,7 @@
                     "type": "patreon"
                 }
             ],
-            "time": "2024-12-01T10:18:08+00:00"
+            "time": "2024-05-18T10:25:07+00:00"
         },
         {
             "name": "gettext/languages",

@@ -181,7 +181,7 @@ Options:
   --audit-mode=MODE      interactive (default) | allow-edit | report
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
   --audit-only=LIST      Comma-separated: text,empty,pot,version (default: all)
-  --audit-strict-po      Try StrictPoLoader first (falls back to lenient on failure)
+  --audit-strict-po      Reserved (strict parse needs gettext v5; wp-cli uses gettext v4)
   --help                 Show this help message
 
 Examples:
