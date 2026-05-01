@@ -120,8 +120,10 @@ class WeblateClient
                 $errorBody = $e->getResponse()->getBody()->getContents();
             }
 
-            if (strpos($errorBody, '"code":"unique"') !== false &&
-                strpos($errorBody, '"attr":"slug"') !== false) {
+            if (
+                strpos($errorBody, '"code":"unique"') !== false
+                && strpos($errorBody, '"attr":"slug"') !== false
+            ) {
                 return [
                     'slug' => $projectSlug,
                     'name' => $projectName,
