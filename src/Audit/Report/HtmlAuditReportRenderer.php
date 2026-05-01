@@ -227,8 +227,12 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
         $details = $f->reportDetails();
         if ($details !== []) {
             $msgCell .= '<div class="detail-block">';
-            foreach ($details as $line) {
-                $msgCell .= '<pre class="detail">' . self::h($line) . '</pre>';
+            if ($f->checkId === CheckId::TEXT_CHANGE) {
+                $msgCell .= '<pre class="detail">' . self::h(implode("\n", $details)) . '</pre>';
+            } else {
+                foreach ($details as $line) {
+                    $msgCell .= '<pre class="detail">' . self::h($line) . '</pre>';
+                }
             }
             $msgCell .= '</div>';
         }
