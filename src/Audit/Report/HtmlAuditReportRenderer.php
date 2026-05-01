@@ -36,7 +36,8 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             . '<style>body{font-family:system-ui,sans-serif;margin:1.5rem;line-height:1.4}'
             . 'table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;vertical-align:top}'
             . 'th{background:#f4f4f4}.meta{margin-bottom:1rem}'
-            . 'pre.detail{margin:.35rem 0 0;white-space:pre-wrap;word-break:break-word;font-size:.9rem;background:#f9f9f9;padding:.5rem;border:1px solid #e0e0e0}</style></head><body>'
+            . '.detail-block{margin-top:.35rem;display:flex;flex-direction:column;gap:.35rem}'
+            . 'pre.detail{margin:0;white-space:pre-wrap;word-break:break-word;font-size:.9rem;background:#f9f9f9;padding:.5rem;border:1px solid #e0e0e0}</style></head><body>'
             . '<h1>Translation audit</h1>'
             . '<div class="meta"><strong>Plugin:</strong> ' . $escName . '<br>'
             . '<strong>Version:</strong> ' . $ver . '<br>'
@@ -52,7 +53,11 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
         $msgCell = htmlspecialchars($f->reportHeadline(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $details = $f->reportDetails();
         if ($details !== []) {
-            $msgCell .= '<pre class="detail">' . htmlspecialchars(implode("\n", $details), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
+            $msgCell .= '<div class="detail-block">';
+            foreach ($details as $line) {
+                $msgCell .= '<pre class="detail">' . htmlspecialchars($line, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
+            }
+            $msgCell .= '</div>';
         }
 
         return '<tr>'
