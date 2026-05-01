@@ -102,8 +102,6 @@ final class Auditor
             return true;
         }
 
-        $streamFindings = !$this->options->usesReportFiles();
-
         foreach ($checks as $c) {
             if (!$this->options->shouldRun($c->id())) {
                 continue;
@@ -113,13 +111,11 @@ final class Auditor
             $found = $c->run($ctx);
             foreach ($found as $f) {
                 $allFindings[] = $f;
-                if ($streamFindings) {
-                    $this->printFinding($f);
-                }
+                $this->printFinding($f);
             }
         }
 
-        if ($allFindings === [] && $streamFindings) {
+        if ($allFindings === []) {
             $this->output->line('No findings.');
         }
 

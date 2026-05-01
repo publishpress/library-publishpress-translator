@@ -183,8 +183,9 @@ Options:
   --audit-mode=MODE      interactive (default) | allow-edit | report
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
   --audit-only=LIST      Comma-separated: text,empty,fuzzy,pot,version (default: all)
-  --audit-report-format=LIST  Optional. Write report files: txt (plain UTF-8, CI/logs), ansi (colors), html
-                               Comma-separated; multiple files. Aliases: plain,text → txt. Default: stream only
+  --audit-report-format=LIST  Optional. Also write report files: txt (plain UTF-8, CI/logs), ansi (colors), html
+                               Comma-separated; multiple files. Aliases: plain,text → txt. Summarized lines still print
+                               to the terminal; files hold the full detail. Omit to skip report files only.
   --audit-report-dir=DIR Optional directory for reports (default: plugin root)
   --audit-strict-po      Reserved (strict parse needs gettext v5; wp-cli uses gettext v4)
   --help                 Show this help message
