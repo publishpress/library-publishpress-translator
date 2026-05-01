@@ -13,6 +13,7 @@
 
     <file>src</file>
     <file>bin</file>
+    <file>scripts</file>
 
     <rule ref="PSR12">
         <exclude name="Generic.Files.LineLength.TooLong" />
