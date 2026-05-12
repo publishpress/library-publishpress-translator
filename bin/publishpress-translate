@@ -216,6 +216,10 @@ Environment Variables:
                                Example: "Dashboard,post type=Post Type,lightbox"
   TRANSLATION_OVERRIDES_{lang} Per-language overrides, e.g. TRANSLATION_OVERRIDES_yor
                                Example: TRANSLATION_OVERRIDES_fr_FR="lightbox=boîte lumineuse"
+  AUDIT_SOURCE_EXCLUDE_PATHS   Comma-separated path substrings to skip during source i18n
+                               scan (source-i18n check). Default: dev-workspace-cache,vendor,
+                               lib/vendor,node_modules
+                               Example: AUDIT_SOURCE_EXCLUDE_PATHS="dev-workspace-cache,assets/js"
 
 Workflow:
   1. Generate translations:  publishpress-translate

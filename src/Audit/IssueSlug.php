@@ -61,6 +61,12 @@ final class IssueSlug
     /** When no more specific slug was set (avoid for POT mismatch rows). */
     public const POT_MISMATCH_GENERIC = 'pot-mismatch';
 
+    public const SOURCE_STRING_MISSING_FROM_POT = 'source-string-missing-from-pot';
+
+    public const SOURCE_I18N_SUMMARY = 'source-i18n-summary';
+
+    public const JS_PARSE_ERROR = 'js-parse-error';
+
     public static function fallbackForCheckId(string $checkId): string
     {
         switch ($checkId) {
@@ -74,6 +80,8 @@ final class IssueSlug
                 return 'text-change';
             case CheckId::PO_VERSION:
                 return 'po-header';
+            case CheckId::SOURCE_I18N:
+                return self::SOURCE_STRING_MISSING_FROM_POT;
             default:
                 return 'audit-issue';
         }

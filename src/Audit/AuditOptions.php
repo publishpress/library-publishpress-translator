@@ -32,9 +32,13 @@ final class AuditOptions
     /** @var string|null */
     private $reportDir;
 
+    /** @var string[] */
+    private $sourceExcludePaths;
+
     /**
      * @param string[] $only
      * @param string[] $reportFormats AuditReportFormat::* values
+     * @param string[] $sourceExcludePaths
      */
     private function __construct(
         string $mode,
@@ -42,19 +46,21 @@ final class AuditOptions
         array $only,
         bool $strictPo,
         array $reportFormats,
-        ?string $reportDir
+        ?string $reportDir,
+        array $sourceExcludePaths
     ) {
-        $this->mode           = $mode;
-        $this->maxCostUsd     = $maxCostUsd;
-        $this->only           = $only;
-        $this->strictPo       = $strictPo;
-        $this->reportFormats  = $reportFormats;
-        $this->reportDir      = $reportDir;
+        $this->mode                = $mode;
+        $this->maxCostUsd          = $maxCostUsd;
+        $this->only                = $only;
+        $this->strictPo            = $strictPo;
+        $this->reportFormats       = $reportFormats;
+        $this->reportDir           = $reportDir;
+        $this->sourceExcludePaths  = $sourceExcludePaths;
     }
 
     public static function defaults(): self
     {
-        return new self('interactive', 5.0, CheckId::all(), false, [], null);
+        return new self('interactive', 5.0, CheckId::all(), false, [], null, ['dev-workspace-cache', 'vendor', 'lib/vendor', 'node_modules']);
     }
 
     public function withMode(string $mode): self
@@ -66,7 +72,7 @@ final class AuditOptions
             );
         }
 
-        return new self($mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir);
+        return new self($mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir, $this->sourceExcludePaths);
     }
 
     public function withMaxCost(float $usd): self
@@ -75,7 +81,7 @@ final class AuditOptions
             throw new InvalidArgumentException('audit max cost must be >= 0');
         }
 
-        return new self($this->mode, $usd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir);
+        return new self($this->mode, $usd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir, $this->sourceExcludePaths);
     }
 
     /**
@@ -97,13 +103,14 @@ final class AuditOptions
             array_values(array_unique($checks)),
             $this->strictPo,
             $this->reportFormats,
-            $this->reportDir
+            $this->reportDir,
+            $this->sourceExcludePaths
         );
     }
 
     public function withStrictPo(bool $strict): self
     {
-        return new self($this->mode, $this->maxCostUsd, $this->only, $strict, $this->reportFormats, $this->reportDir);
+        return new self($this->mode, $this->maxCostUsd, $this->only, $strict, $this->reportFormats, $this->reportDir, $this->sourceExcludePaths);
     }
 
     /**
@@ -113,7 +120,7 @@ final class AuditOptions
     {
         $canonical = AuditReportFormat::parseList($formats);
 
-        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $canonical, $this->reportDir);
+        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $canonical, $this->reportDir, $this->sourceExcludePaths);
     }
 
     public function withReportDir(?string $dir): self
@@ -125,7 +132,23 @@ final class AuditOptions
             }
         }
 
-        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $dir);
+        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $dir, $this->sourceExcludePaths);
+    }
+
+    /**
+     * @param string[] $paths Path substrings; any source file whose normalized path contains one of these is skipped.
+     */
+    public function withSourceExcludePaths(array $paths): self
+    {
+        return new self($this->mode, $this->maxCostUsd, $this->only, $this->strictPo, $this->reportFormats, $this->reportDir, array_values($paths));
+    }
+
+    /**
+     * @return string[]
+     */
+    public function sourceExcludePaths(): array
+    {
+        return $this->sourceExcludePaths;
     }
 
     /**
