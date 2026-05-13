@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[1.2.0] - 13 May, 2026
+
+- Added: New `source-i18n` audit check to compare PHP/JS/JSX i18n source strings against POT coverage.
+
 [1.1.0] - 01 April, 2026
 
 - Added: New `--audit` command and comprehensive options for translation auditing.

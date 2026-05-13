@@ -198,6 +198,12 @@ class Translator
         }
 
         $this->auditOptions = AuditOptions::defaults();
+
+        $envExcludePaths = getenv('AUDIT_SOURCE_EXCLUDE_PATHS');
+        if ($envExcludePaths !== false && $envExcludePaths !== '') {
+            $paths = array_values(array_filter(array_map('trim', explode(',', $envExcludePaths))));
+            $this->auditOptions = $this->auditOptions->withSourceExcludePaths($paths);
+        }
     }
 
     /**

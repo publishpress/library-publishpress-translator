@@ -12,6 +12,7 @@ use PublishPress\Translations\Audit\Checks\EmptyTranslationCheck;
 use PublishPress\Translations\Audit\Checks\FuzzyTranslationCheck;
 use PublishPress\Translations\Audit\Checks\PoVersionCheck;
 use PublishPress\Translations\Audit\Checks\PotMismatchCheck;
+use PublishPress\Translations\Audit\Checks\SourceI18nCheck;
 use PublishPress\Translations\Audit\Checks\TextChangeCheck;
 use PublishPress\Translations\Output;
 
@@ -84,6 +85,7 @@ final class Auditor
             new FuzzyTranslationCheck(),
             new PotMismatchCheck(),
             new PoVersionCheck(),
+            new SourceI18nCheck(),
         ];
 
         $allFindings = [];
