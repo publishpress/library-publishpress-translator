@@ -308,7 +308,7 @@ class Translator
             $ok = (new Auditor(
                 $this->pluginRoot,
                 $this->languagesDir,
-                $this->targetLanguages,
+                array_values(array_unique(array_merge($this->targetLanguages, $this->skippedLanguages))),
                 $this->output,
                 $this->getApiKey(),
                 $this->getPluginVersion(),
