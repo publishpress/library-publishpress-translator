@@ -64,11 +64,11 @@ final class SourceI18nCheck implements AuditCheckInterface
         $out = $ctx->output();
 
         $phpFiles = PhpI18nExtractor::collectPhpFiles($ctx->pluginRoot());
-        $jsFiles  = JsI18nExtractor::collectJsFiles($ctx->pluginRoot());
+        $jsFiles = JsI18nExtractor::collectJsFiles($ctx->pluginRoot());
 
         $excludePaths = $ctx->options()->sourceExcludePaths();
-        $phpFiles     = self::filterByExcludedPaths($phpFiles, $ctx->pluginRoot(), $excludePaths);
-        $jsFiles      = self::filterByExcludedPaths($jsFiles,  $ctx->pluginRoot(), $excludePaths);
+        $phpFiles = self::filterByExcludedPaths($phpFiles, $ctx->pluginRoot(), $excludePaths);
+        $jsFiles = self::filterByExcludedPaths($jsFiles, $ctx->pluginRoot(), $excludePaths);
 
         $out->step(sprintf('Collecting source files — %d PHP, %d JS/JSX', count($phpFiles), count($jsFiles)));
 
@@ -78,8 +78,8 @@ final class SourceI18nCheck implements AuditCheckInterface
 
         $out->step(sprintf('Extracting JS/JSX i18n strings (%d files)…', count($jsFiles)));
         $jsParseErrors = [];
-        $jsCalls       = [];
-        $jsTotal       = count($jsFiles);
+        $jsCalls = [];
+        $jsTotal = count($jsFiles);
         foreach ($jsFiles as $idx => $jsFile) {
             if ($jsTotal >= 10 && ($idx % 25 === 0 || $idx === $jsTotal - 1)) {
                 $out->bullet(sprintf('%d / %d files', $idx + 1, $jsTotal));
@@ -112,7 +112,7 @@ final class SourceI18nCheck implements AuditCheckInterface
         }
 
         foreach ($potFiles as $potPath) {
-            $potName    = basename($potPath);
+            $potName = basename($potPath);
             $textDomain = basename($potPath, '.pot');
 
             $out->step('Checking against ' . $potName . '…');
@@ -136,15 +136,15 @@ final class SourceI18nCheck implements AuditCheckInterface
                 continue;
             }
 
-            $potKeys       = $potFile->msgidKeySet();
-            $domainCalls   = array_filter($allCalls, static function (array $call) use ($textDomain): bool {
+            $potKeys = $potFile->msgidKeySet();
+            $domainCalls = array_filter($allCalls, static function (array $call) use ($textDomain): bool {
                 return $call['domain'] === $textDomain;
             });
-            $domainCalls   = array_values($domainCalls);
+            $domainCalls = array_values($domainCalls);
 
-            $totalCalls     = count($domainCalls);
+            $totalCalls = count($domainCalls);
             $skippedDynamic = count($allCalls) - $totalCalls;
-            $missingCount    = 0;
+            $missingCount = 0;
 
             /** @var array<string, array{file: string, line: int, count: int}> $seen */
             $seen = [];
@@ -166,11 +166,11 @@ final class SourceI18nCheck implements AuditCheckInterface
                 }
 
                 $seen[$dedupeKey] = [
-                    'file'    => $call['file'],
-                    'line'    => $call['line'],
-                    'count'   => 1,
-                    'potKey'  => $potKey,
-                    'text'    => $call['text'],
+                    'file' => $call['file'],
+                    'line' => $call['line'],
+                    'count' => 1,
+                    'potKey' => $potKey,
+                    'text' => $call['text'],
                     'context' => $call['context'],
                 ];
 
