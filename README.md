@@ -12,7 +12,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 - **Supports 10+ languages** by default
 - **Dry-run mode** for cost estimation
 - **Automatic detection** of `.pot` files
-- **Translation audit** (`--audit`) to review `.po` health (empty/fuzzy entries, POT alignment, version headers) and optionally judge AI worthiness of changed strings
+- **Translation audit** (`--audit`) to review `.po` health (empty/fuzzy entries, POT alignment, version headers), verify source i18n coverage in POT files, and optionally judge AI worthiness of changed strings
 
 ## Requirements
 
@@ -105,6 +105,8 @@ OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
 # Optional: short plugin description for translation audit AI text check (see Additional configuration)
 # PLUGIN_AI_CONTEXT=PublishPress Future — schedule and automate post status changes.
+# Optional: exclude source paths from source-i18n audit check (comma-separated fragments)
+# AUDIT_SOURCE_EXCLUDE_PATHS=vendor,node_modules,tests/fixtures,build
 ```
 > **Note:** Shell environment variables take precedence over `.env` file values.
 
@@ -125,6 +127,15 @@ The following environment variables control advanced behaviour:
 
 - **`PLUGIN_AI_CONTEXT`** (optional; translation audit **`text`** check only)
   Short free-text description of the plugin or product under audit (for example what it does, who it is for, or official product naming). When set and non-empty after trimming, it is sent to the OpenAI worthiness judge as `plugin_context` alongside the diff batch so judgments can use domain and terminology context. If unset, empty, or whitespace-only, nothing extra is sent. Values longer than 4000 bytes are truncated before the request.
+
+- **`AUDIT_SOURCE_EXCLUDE_PATHS`** (optional; translation audit **`source-i18n`** check only)
+  Comma-separated list of path fragments to exclude from source scanning in the source i18n coverage check. Any PHP/JS/JSX file whose normalized relative path contains one of these fragments is skipped.
+
+  Defaults: `dev-workspace-cache,vendor,lib/vendor,node_modules`.
+
+  ```bash
+  export AUDIT_SOURCE_EXCLUDE_PATHS="vendor,node_modules,tests/fixtures,build"
+  ```
 
 - **`WEBLATE_API_TOKEN`** (optional for AI generation, required for Weblate sync)
   If not set, Weblate integration is disabled:
@@ -380,6 +391,7 @@ composer translate:audit
 | `fuzzy` | Fuzzy-flagged entries |
 | `pot` | Strings present in `.pot` but missing or mismatched in `.po` |
 | `version` | `Project-Id-Version` header vs plugin version (advisory; headers are not rewritten by the tool) |
+| `source-i18n` | Statically extractable i18n calls in PHP and JS/JSX source vs POT entries for each text domain |
 
 **Modes (`--audit-mode`):**
 
@@ -394,14 +406,17 @@ vendor/bin/publishpress-translate --audit --audit-mode=report
 
 **Scope:** Only locales in the translator **target language** list are scanned (same defaults and `--languages` handling as AI translation). Codes filtered out by `SKIP_LANGUAGES` / built-in skipped locales are **not** audited, even if you list them in `--languages`. To audit a narrower set of allowed locales, use e.g. `--languages=de_DE,fr_FR`.
 
+For the `source-i18n` check, source scanning also excludes paths from `AUDIT_SOURCE_EXCLUDE_PATHS` (comma-separated fragments). If unset, defaults are: `dev-workspace-cache,vendor,lib/vendor,node_modules`.
+
 **Run a subset of checks:**
 
 ```bash
 vendor/bin/publishpress-translate --audit --audit-only=empty,fuzzy,pot,version
 vendor/bin/publishpress-translate --audit --audit-only=text --languages=de_DE
+vendor/bin/publishpress-translate --audit --audit-only=source-i18n
 ```
 
-`--audit-only` accepts a comma-separated list: `text`, `empty`, `fuzzy`, `pot`, `version`.
+`--audit-only` accepts a comma-separated list: `text`, `empty`, `fuzzy`, `pot`, `version`, `source-i18n`.
 
 **Cost control (text check only):**
 

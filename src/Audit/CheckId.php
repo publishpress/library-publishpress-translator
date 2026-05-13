@@ -20,6 +20,8 @@ final class CheckId
 
     public const PO_VERSION = 'version';
 
+    public const SOURCE_I18N = 'source-i18n';
+
     /**
      * @return string[]
      */
@@ -31,6 +33,7 @@ final class CheckId
             self::FUZZY_TRANSLATION,
             self::POT_MISMATCH,
             self::PO_VERSION,
+            self::SOURCE_I18N,
         ];
     }
 
@@ -50,6 +53,7 @@ final class CheckId
             self::FUZZY_TRANSLATION    => 'Fuzzy translations',
             self::POT_MISMATCH        => 'POT vs PO mismatch',
             self::PO_VERSION          => 'PO header',
+            self::SOURCE_I18N         => 'Source strings vs POT',
         ];
 
         return $map[$id] ?? $id;
