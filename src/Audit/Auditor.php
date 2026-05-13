@@ -14,6 +14,7 @@ use PublishPress\Translations\Audit\Checks\PoVersionCheck;
 use PublishPress\Translations\Audit\Checks\PotMismatchCheck;
 use PublishPress\Translations\Audit\Checks\SourceI18nCheck;
 use PublishPress\Translations\Audit\Checks\TextChangeCheck;
+use PublishPress\Translations\Audit\Checks\TranslationCountCheck;
 use PublishPress\Translations\Output;
 
 final class Auditor
@@ -86,6 +87,7 @@ final class Auditor
             new PotMismatchCheck(),
             new PoVersionCheck(),
             new SourceI18nCheck(),
+            new TranslationCountCheck(),
         ];
 
         $allFindings = [];

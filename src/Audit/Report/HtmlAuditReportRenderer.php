@@ -10,6 +10,7 @@ namespace PublishPress\Translations\Audit\Report;
 
 use PublishPress\Translations\Audit\AuditFinding;
 use PublishPress\Translations\Audit\CheckId;
+use PublishPress\Translations\Audit\IssueSlug;
 
 final class HtmlAuditReportRenderer implements AuditReportRendererInterface
 {
@@ -51,7 +52,9 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             $tabBar .= '<button type="button" class="tab-btn" role="tab" aria-selected="false" data-panel="' . self::h($panelId) . '">' . $label . '</button>';
 
             $list = $byCheck[$cid] ?? [];
-            if ($list === []) {
+            if ($cid === CheckId::TRANSLATION_COUNT) {
+                $body = self::buildTranslationCountBody($list);
+            } elseif ($list === []) {
                 $body = '<p class="all-clear">Everything passed — no issues reported for this check.</p>';
             } else {
                 $rows = '';
@@ -254,6 +257,84 @@ final class HtmlAuditReportRenderer implements AuditReportRendererInterface
             . '<td><code>' . self::h($f->resolvedIssueSlug()) . '</code></td>'
             . '<td>' . $msgCell . '</td>'
             . "</tr>\n";
+    }
+
+    /**
+     * @param AuditFinding[] $list
+     */
+    private static function buildTranslationCountBody(array $list): string
+    {
+        if ($list === []) {
+            return '<p class="all-clear">No string count data available.</p>';
+        }
+
+        $potHtml = '';
+        $rows    = '';
+
+        foreach ($list as $f) {
+            if ($f->issueSlug === IssueSlug::NO_POT_IN_LANGUAGES) {
+                return '<p>' . self::h($f->message) . '</p>';
+            }
+
+            if ($f->issueSlug === IssueSlug::POT_PARSE_ERROR) {
+                $potHtml .= '<p><span class="badge fail">POT parse error:</span> ' . self::h($f->message) . '</p>';
+                continue;
+            }
+
+            if ($f->issueSlug === IssueSlug::POT_STRING_COUNT && $f->language === '') {
+                $potHtml .= '<p><strong>' . self::h($f->message) . '</strong></p>';
+                continue;
+            }
+
+            if ($f->issueSlug === IssueSlug::PO_PARSE_ERROR) {
+                $rows .= '<tr>'
+                    . '<td>' . self::h($f->language) . '</td>'
+                    . '<td colspan="3"><span class="badge fail">Parse error:</span> ' . self::h($f->message) . '</td>'
+                    . "</tr>\n";
+                continue;
+            }
+
+            if ($f->issueSlug === IssueSlug::TRANSLATION_COUNT_SUMMARY) {
+                $poCount = 0;
+                $extra   = 0;
+                $missing = 0;
+                if (preg_match('/^(\d+) string\(s\) — (\d+) extra, (\d+) missing/', $f->message, $m)) {
+                    $poCount = (int) $m[1];
+                    $extra   = (int) $m[2];
+                    $missing = (int) $m[3];
+                }
+
+                if ($extra > 0 && $missing > 0) {
+                    $extraBadge   = '<span class="badge fail">' . $extra . '</span>';
+                    $missingBadge = '<span class="badge fail">' . $missing . '</span>';
+                } elseif ($extra > 0) {
+                    $extraBadge   = '<span class="badge warn">' . $extra . '</span>';
+                    $missingBadge = (string) $missing;
+                } elseif ($missing > 0) {
+                    $extraBadge   = (string) $extra;
+                    $missingBadge = '<span class="badge warn">' . $missing . '</span>';
+                } else {
+                    $extraBadge   = '<span class="badge ok">' . $extra . '</span>';
+                    $missingBadge = '<span class="badge ok">' . $missing . '</span>';
+                }
+
+                $rows .= '<tr>'
+                    . '<td>' . self::h($f->language) . '</td>'
+                    . '<td>' . $poCount . '</td>'
+                    . '<td>' . $extraBadge . '</td>'
+                    . '<td>' . $missingBadge . '</td>'
+                    . "</tr>\n";
+            }
+        }
+
+        $table = '';
+        if ($rows !== '') {
+            $table = '<table class="findings-table"><thead><tr>'
+                . '<th>Language</th><th>Strings in PO</th><th>Extra (PO ∖ POT)</th><th>Missing (POT ∖ PO)</th>'
+                . '</tr></thead><tbody>' . $rows . '</tbody></table>';
+        }
+
+        return $potHtml . $table;
     }
 
     private static function h(string $s): string
