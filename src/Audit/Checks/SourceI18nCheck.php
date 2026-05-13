@@ -209,7 +209,7 @@ final class SourceI18nCheck implements AuditCheckInterface
 
             $findings[] = new AuditFinding(
                 $this->id(),
-                'info',
+                $missingCount > 0 ? 'warning' : 'info',
                 $potName,
                 '',
                 sprintf(

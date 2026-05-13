@@ -67,6 +67,10 @@ final class IssueSlug
 
     public const JS_PARSE_ERROR = 'js-parse-error';
 
+    public const POT_STRING_COUNT = 'pot-string-count';
+
+    public const TRANSLATION_COUNT_SUMMARY = 'translation-count-summary';
+
     public static function fallbackForCheckId(string $checkId): string
     {
         switch ($checkId) {
@@ -82,6 +86,8 @@ final class IssueSlug
                 return 'po-header';
             case CheckId::SOURCE_I18N:
                 return self::SOURCE_STRING_MISSING_FROM_POT;
+            case CheckId::TRANSLATION_COUNT:
+                return self::TRANSLATION_COUNT_SUMMARY;
             default:
                 return 'audit-issue';
         }

@@ -22,6 +22,8 @@ final class CheckId
 
     public const SOURCE_I18N = 'source-i18n';
 
+    public const TRANSLATION_COUNT = 'translation-count';
+
     /**
      * @return string[]
      */
@@ -34,6 +36,7 @@ final class CheckId
             self::POT_MISMATCH,
             self::PO_VERSION,
             self::SOURCE_I18N,
+            self::TRANSLATION_COUNT,
         ];
     }
 
@@ -54,6 +57,7 @@ final class CheckId
             self::POT_MISMATCH        => 'POT vs PO mismatch',
             self::PO_VERSION          => 'PO header',
             self::SOURCE_I18N         => 'Source strings vs POT',
+            self::TRANSLATION_COUNT   => 'Translation string counts',
         ];
 
         return $map[$id] ?? $id;
