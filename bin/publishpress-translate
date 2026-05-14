@@ -146,6 +146,7 @@ $options = getopt('', [
     'languages:',
     'download',
     'upload',
+    'upload-pot',
     'repair-plurals',
     'clean-po',
     'sync-files',
@@ -176,6 +177,7 @@ Options:
   --languages=LANGS      Comma-separated language codes (default: all configured)
   --download             Download translations from Weblate (instead of generating)
   --upload               Upload existing translations to Weblate (no AI translation)
+  --upload-pot           Upload only the POT file (source strings) to Weblate, without uploading PO files
   --repair-plurals       Repair malformed plural entries in existing .po files
   --clean-po             Clean duplicate entries from all .po files
   --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
@@ -198,6 +200,7 @@ Examples:
   publishpress-translate --force                   # Force re-translate all
   publishpress-translate --download                # Download from Weblate
   publishpress-translate --upload                  # Upload existing translations to Weblate
+  publishpress-translate --upload-pot              # Upload only the POT source strings to Weblate
   publishpress-translate --repair-plurals          # Fix malformed plural entries in .po files
   publishpress-translate --clean-po                # Remove duplicate entries from .po files
   publishpress-translate --sync-files              # Check if translated files are up-to-date
@@ -295,6 +298,7 @@ try {
         'sync-files'     => 'syncPoAndMoFiles',
         'download'       => 'downloadFromWeblate',
         'upload'         => 'uploadToWeblate',
+        'upload-pot'     => 'uploadPotToWeblate',
         'audit'          => 'audit',
     ];
 
