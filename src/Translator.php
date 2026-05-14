@@ -2400,6 +2400,68 @@ class Translator
     }
 
     /**
+     * Upload only the POT file (source strings) to Weblate
+     *
+     * @return bool
+     */
+    public function uploadPotToWeblate()
+    {
+        if (!$this->weblateClient) {
+            fwrite(STDERR, "Error: Weblate not configured.\n");
+            fwrite(STDERR, "Please set WEBLATE_API_TOKEN environment variable.\n\n");
+            return false;
+        }
+
+        $pluginSlug = $this->getPluginSlug();
+        $start = $this->writeCliBannerAndPluginContext();
+
+        $potFiles = $this->findPotFiles();
+
+        if (empty($potFiles)) {
+            fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+            return false;
+        }
+
+        $this->output->phase('Uploading POT file(s) to Weblate');
+        $this->output->step('POT files found: ' . count($potFiles));
+
+        $projectSlug = $this->getWeblateProjectSlug();
+        $success = true;
+
+        foreach ($potFiles as $potFile) {
+            $potFileName   = basename($potFile);
+            $textDomain    = str_replace('.pot', '', $potFileName);
+            $componentSlug = $this->getWeblateComponentSlug($textDomain);
+
+            $this->output->separator();
+            $this->output->step('POT file: ' . $potFileName);
+            $this->output->step('Component: ' . $componentSlug);
+
+            if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
+                fwrite(STDERR, "  ⚠️  Component '{$componentSlug}' not found on Weblate, skipping.\n");
+                $success = false;
+                continue;
+            }
+
+            try {
+                $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+                $this->output->step('POT uploaded successfully');
+                $this->output->step('View at: https://weblate.publishpress.com/projects/' . $projectSlug . '/' . $componentSlug . '/');
+            } catch (Exception $e) {
+                fwrite(STDERR, "  ❌ Failed to upload POT for {$textDomain}: " . $e->getMessage() . "\n");
+                $success = false;
+            }
+        }
+
+        $this->output->separator();
+        $this->output->line('POT upload ' . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}.");
+        $this->writeCliCompletion($start, $success);
+
+        return $success;
+    }
+
+    /**
      * Get Weblate project slug from composer.json or config
      *
      * @return string
