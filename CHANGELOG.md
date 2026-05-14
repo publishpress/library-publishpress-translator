@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[1.4.0] - 14 May, 2026
+
+- Added: New `upload-pot` command to upload only the POT file to Weblate's source language, without waiting for all languages to finish uploading (Issue #124).
+- Fixed: POT synchronization with Weblate now uses the `replace` method for updates, ensuring the plugin's file is always the source of truth. This completely replaces the POT file on Weblate and automatically syncs it with other languages (Issue #123).
+- Removed: POT upload capability for VCS-based projects, where the repository now remains the sole source of truth (Issue #123).
+
 [1.3.0] - 13 May, 2026
 
 - Added: New `translation-count` audit check to count translatable strings in `.pot` and `.po` files and report coverage.
