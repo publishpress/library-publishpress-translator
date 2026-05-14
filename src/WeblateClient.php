@@ -387,21 +387,11 @@ class WeblateClient
             $hasVcs = $this->componentHasVcs($projectSlug, $componentSlug);
 
             if ($hasVcs) {
-                $response = $this->client->post(
-                    "translations/{$projectSlug}/{$componentSlug}/en/file/",
-                    [
-                        'multipart' => [
-                            [
-                                'name' => 'file',
-                                'contents' => fopen($potFilePath, 'r'),
-                                'filename' => basename($potFilePath),
-                            ],
-                            [
-                                'name' => 'method',
-                                'contents' => 'replace',
-                            ],
-                        ]
-                    ]
+                throw new Exception(
+                    "POT upload skipped: component '{$componentSlug}' is VCS-backed.\n" .
+                    "For VCS components, git is the source of truth for source strings.\n" .
+                    "To update Weblate's source strings, commit and push the POT file to the repository.\n" .
+                    "Weblate will pick up the changes on its next git pull."
                 );
             } else {
                 $this->ensureTranslation($projectSlug, $componentSlug, 'en');
@@ -417,7 +407,7 @@ class WeblateClient
                             ],
                             [
                                 'name' => 'method',
-                                'contents' => 'source',
+                                'contents' => 'replace',
                             ],
                         ]
                     ]
