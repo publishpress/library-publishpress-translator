@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[1.5.0] - 19 May, 2026
+
+- Added: New `--verbose` flag to enable debug/verbose output. Details such as POT upload failures are now hidden by default and only shown when `--verbose` is passed.
+- Fixed: `componentExists` now falls back to scanning the project's component list when the direct slug lookup returns 404. This prevents duplicate-creation errors when Weblate has a component in a soft-deleted or pending-removal state.
+
 [1.4.0] - 14 May, 2026
 
 - Added: New `upload-pot` command to upload only the POT file to Weblate's source language, without waiting for all languages to finish uploading (Issue #124).

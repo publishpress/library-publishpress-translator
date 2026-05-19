@@ -157,6 +157,7 @@ $options = getopt('', [
     'audit-report-format:',
     'audit-report-dir:',
     'audit-strict-po',
+    'verbose',
     'help',
 ]);
 
@@ -191,6 +192,7 @@ Options:
                                to the terminal; files hold the full detail. Omit to skip report files only.
   --audit-report-dir=DIR Optional directory for reports (default: plugin root)
   --audit-strict-po      Reserved (strict parse needs gettext v5; wp-cli uses gettext v4)
+  --verbose              Show debug/verbose output (e.g. POT upload details, skipped steps)
   --help                 Show this help message
 
 Examples:
@@ -246,6 +248,10 @@ HELP;
 try {
     $output     = new Output();
     $translator = new Translator($pluginRoot, $output);
+
+    if (isset($options['verbose'])) {
+        $output->setVerbose(true);
+    }
 
     if (isset($options['dry-run'])) {
         $translator->setDryRun(true);

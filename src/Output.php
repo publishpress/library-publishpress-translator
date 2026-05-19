@@ -13,6 +13,23 @@ class Output
      */
     private $indent = '    ';
 
+    /**
+     * Whether verbose/debug output is enabled
+     *
+     * @var bool
+     */
+    private $verbose = false;
+
+    public function setVerbose(bool $verbose): void
+    {
+        $this->verbose = $verbose;
+    }
+
+    public function isVerbose(): bool
+    {
+        return $this->verbose;
+    }
+
     public function width(): int
     {
         $cols = (int) getenv('COLUMNS');
@@ -183,6 +200,10 @@ class Output
 
     public function debug(string $message): void
     {
+        if (!$this->verbose) {
+            return;
+        }
+
         echo "\033[30m" . $message . "\033[0m\n";
     }
 }

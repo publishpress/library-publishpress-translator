@@ -2175,7 +2175,7 @@ class Translator
             $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
             $this->output->step('POT file uploaded');
         } catch (Exception $e) {
-            $this->output->warning('POT upload failed: ' . $e->getMessage());
+            $this->output->debug('POT upload failed: ' . $e->getMessage());
             $this->output->step('Continuing with PO file uploads');
         }
 
