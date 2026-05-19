@@ -148,10 +148,45 @@ class WeblateClient
             return $response->getStatusCode() === 200;
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
-                return false;
+                // The direct slug GET returned 404, but Weblate may have the component in a
+                // soft-deleted / pending-removal state where the name is still reserved.
+                // Fall back to scanning the project's component list.
+                return $this->componentExistsInProjectList($projectSlug, $componentSlug);
             }
             throw new Exception("Error checking component: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Check if a component appears in the project's component list (fallback for soft-deleted state).
+     *
+     * @param string $projectSlug
+     * @param string $componentSlug
+     * @return bool
+     */
+    private function componentExistsInProjectList($projectSlug, $componentSlug)
+    {
+        try {
+            $url = "projects/{$projectSlug}/components/";
+            while ($url) {
+                $response = $this->client->get($url);
+                $data = json_decode($response->getBody()->getContents(), true);
+
+                if (isset($data['results'])) {
+                    foreach ($data['results'] as $component) {
+                        if (isset($component['slug']) && $component['slug'] === $componentSlug) {
+                            return true;
+                        }
+                    }
+                }
+
+                $url = !empty($data['next']) ? $data['next'] : null;
+            }
+        } catch (GuzzleException $e) {
+            // Project not found or network error — treat as not found.
+        }
+
+        return false;
     }
 
     /**
