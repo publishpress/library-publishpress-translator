@@ -1,0 +1,35 @@
+---
+description: PHP and CLI conventions for src/ and bin/
+globs: "{src/**/*.php,bin/**,scripts/**/*.php}"
+alwaysApply: false
+---
+
+# PHP / CLI
+
+## Namespace
+
+`PublishPress\Translations\` — audit under `...\Audit\`, shared under `...\Support\`.
+
+## Entry flow
+
+`bin/publishpress-translate` → load autoload + `.env` → `Translator` method from flag map (`audit`, `download`, `translate`, …).
+
+## Translator changes
+
+- **Default**: extract new workflow to dedicated class; call from `Translator`.
+- **Exception**: tiny one-liner delegation or bugfix in existing private method.
+- Weblate: `WeblateClient.php`. Overrides: `TranslationOverrides.php` only.
+
+## Output
+
+- User messages via `Output` (`banner`, `phase`, `success`, `warning`).
+- `Output` has phpcs ignore for CLI non-HTML escape — do not copy that pattern into HTML report renderers.
+
+## gettext
+
+- Library uses **gettext v4** (`gettext/gettext` ^4.8). `--audit-strict-po` may be no-op where v5 unavailable.
+
+## Docblocks
+
+- File-level `@package PublishPress\Translations` (or `...\Audit\...`).
+- `@param` / `@return` on non-trivial public APIs.

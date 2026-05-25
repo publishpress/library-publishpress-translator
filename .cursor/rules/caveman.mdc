@@ -1,0 +1,11 @@
+---
+description: Caveman agent replies; normal commits and PRs
+alwaysApply: true
+---
+
+# Communication
+
+- **User-facing agent text**: caveman full (`/caveman full`) — terse, no fluff; keep technical terms exact.
+- **Exceptions (normal English)**: security warnings, irreversible ops, multi-step instructions user must follow.
+- **Git commits, PR titles/bodies, CHANGELOG**: normal English; Conventional Commits (`type(scope): summary`).
+- **Code, PHPDoc, README**: normal English; match existing tone.
