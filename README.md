@@ -203,17 +203,17 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
-- **`SKIP_LANGUAGES`** (optional, default: `it_IT,es_ES,fr_FR`)
+- **`SKIP_LANGUAGES`** (optional, default: none)
   Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
-  These languages are typically handled by human translators on Weblate.
-  The default skipped languages are merged with any custom ones you specify.
+  Use this for languages that are handled by human translators on Weblate instead of AI.
+  No languages are skipped by default; all target languages are translated unless you opt some out here.
 
   ```bash
   export SKIP_LANGUAGES=it_IT,es_ES,fr_FR
   ```
 
 ```.env file
-SKIP_LANGUAGES=it_IT,es_ES,fr_FR,de_DE
+SKIP_LANGUAGES=de_DE
 ```
 
 ### Complete Translation Workflow
@@ -404,7 +404,7 @@ composer translate:audit:report
 vendor/bin/publishpress-translate --audit --audit-mode=report
 ```
 
-**Scope:** Only locales in the translator **target language** list are scanned (same defaults and `--languages` handling as AI translation). Codes filtered out by `SKIP_LANGUAGES` / built-in skipped locales are **not** audited, even if you list them in `--languages`. To audit a narrower set of allowed locales, use e.g. `--languages=de_DE,fr_FR`.
+**Scope:** Only locales in the translator **target language** list are scanned (same defaults and `--languages` handling as AI translation). Codes filtered out by `SKIP_LANGUAGES` are **not** audited, even if you list them in `--languages`. To audit a narrower set of allowed locales, use e.g. `--languages=de_DE,fr_FR`.
 
 For the `source-i18n` check, source scanning also excludes paths from `AUDIT_SOURCE_EXCLUDE_PATHS` (comma-separated fragments). If unset, defaults are: `dev-workspace-cache,vendor,lib/vendor,node_modules`.
 
@@ -448,14 +448,17 @@ The tool translates into these languages by default:
 - Danish (da_DK)
 - German (de_DE)
 - Greek (el)
+- Spanish (es_ES)
 - Estonian (et_EE)
 - Persian (fa_IR)
 - Finnish (fi)
 - Filipino (fil)
+- French (fr_FR)
 - Hebrew (he_IL)
 - Croatian (hr)
 - Hungarian (hu_HU)
 - Indonesian (id_ID)
+- Italian (it_IT)
 - Japanese (ja)
 - Korean (ko_KR)
 - Lithuanian (lt_LT)
@@ -476,14 +479,13 @@ The tool translates into these languages by default:
 - Chinese (China) (zh_CN)
 - Chinese (Taiwan) (zh_TW)
 
-### Skipped Languages
+### Skipping Languages (Optional)
 
-The following languages should not be translated by Potomatic, they are handled by human translators:
-- Italian (it_IT)
-- Spanish (es_ES)
-- French (fr_FR)
+No languages are skipped by default; Italian (it_IT), Spanish (es_ES), and French (fr_FR) are translated like any other target language. If you want specific languages to be handled by human translators instead of AI, opt them out with the `SKIP_LANGUAGES` environment variable (see **Additional configuration**):
 
-These languages will be skipped during translation and upload processes, even if PO files exist for them.
+```bash
+export SKIP_LANGUAGES=it_IT,es_ES,fr_FR
+```
 
 **How Skipped Languages Work:**
 
