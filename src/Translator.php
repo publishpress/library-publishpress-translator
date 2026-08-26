@@ -36,11 +36,7 @@ class Translator
      *
      * @var array
      */
-    private $skippedLanguages = [
-        'it_IT',
-        'es_ES',
-        'fr_FR',
-    ];
+    private $skippedLanguages = [];
 
     /**
      * Target languages
@@ -48,6 +44,9 @@ class Translator
      * @var array
      */
     private $targetLanguages = [
+        'it_IT',
+        'es_ES',
+        'fr_FR',
         'de_DE',
         'id_ID',
         'fil',
