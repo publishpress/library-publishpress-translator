@@ -388,10 +388,12 @@ composer translate:audit
 | --- | --- |
 | `text` | Git-changed `.po` entries: optional AI judgment whether the translation still fits the source (uses `OPENAI_API_KEY`; spending capped by `--audit-max-cost`) |
 | `empty` | Untranslated (`msgstr` empty) strings |
+| `identical` | Translations identical to their source, excluding protected terms and the configured plugin name |
 | `fuzzy` | Fuzzy-flagged entries |
 | `pot` | Strings present in `.pot` but missing or mismatched in `.po` |
 | `version` | `Project-Id-Version` header vs plugin version (advisory; headers are not rewritten by the tool) |
 | `source-i18n` | Statically extractable i18n calls in PHP and JS/JSX source vs POT entries for each text domain |
+| `translation-count` | Translation string counts and coverage per locale |
 
 **Modes (`--audit-mode`):**
 
@@ -411,12 +413,12 @@ For the `source-i18n` check, source scanning also excludes paths from `AUDIT_SOU
 **Run a subset of checks:**
 
 ```bash
-vendor/bin/publishpress-translate --audit --audit-only=empty,fuzzy,pot,version
+vendor/bin/publishpress-translate --audit --audit-only=empty,identical,fuzzy,pot,version
 vendor/bin/publishpress-translate --audit --audit-only=text --languages=de_DE
 vendor/bin/publishpress-translate --audit --audit-only=source-i18n
 ```
 
-`--audit-only` accepts a comma-separated list: `text`, `empty`, `fuzzy`, `pot`, `version`, `source-i18n`.
+`--audit-only` accepts a comma-separated list: `text`, `empty`, `identical`, `fuzzy`, `pot`, `version`, `source-i18n`, `translation-count`.
 
 **Cost control (text check only):**
 

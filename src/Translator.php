@@ -11,6 +11,7 @@ namespace PublishPress\Translations;
 use Exception;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
+use PublishPress\Translations\Support\IdenticalTranslationPolicy;
 use PublishPress\Translations\Support\TranslationOverrides;
 
 class Translator
@@ -2771,33 +2772,10 @@ class Translator
             return;
         }
 
-        // Build set of words that are intentionally kept as-is
-        $protectedWords = [];
-
-        // 1. Dictionary defaults
-        $dictDefaults = $this->loadDictionaryDefaults();
-        foreach ($dictDefaults as $source => $target) {
-            if (strcasecmp($source, $target) === 0) {
-                $protectedWords[strtolower($source)] = true;
-            }
-        }
-
-        // 2. Plugin name
-        $pluginName = $this->getPluginNameForExclusion();
-        if ($pluginName) {
-            $protectedWords[strtolower($pluginName)] = true;
-        }
-
-        // 3. Current env var overrides for this language
-        if ($language !== null) {
-            $envOverrides = $this->getOverridesForLanguage($language);
-            foreach ($envOverrides as $source => $target) {
-                if (strcasecmp($source, $target) === 0) {
-                    $protectedWords[strtolower($source)] = true;
-                }
-            }
-        }
-
+        $policy = new IdenticalTranslationPolicy(
+            $language !== null ? $language : '',
+            (string) $this->getPluginNameForExclusion()
+        );
         $lines  = explode("\n", $content);
         $result = [];
 
@@ -2820,7 +2798,7 @@ class Translator
                     $msgstr = $msgstrMatch[1];
 
                     if ($msgid === $msgstr && $msgid !== '') {
-                        if (!isset($protectedWords[strtolower($msgid)])) {
+                        if (!$policy->isProtected($msgid) && !$policy->isLinkOnly($msgid)) {
                             $commentIndex = count($result) - 1;
                             while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
                                 $commentIndex--;

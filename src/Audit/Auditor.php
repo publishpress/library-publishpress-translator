@@ -10,6 +10,7 @@ namespace PublishPress\Translations\Audit;
 
 use PublishPress\Translations\Audit\Checks\EmptyTranslationCheck;
 use PublishPress\Translations\Audit\Checks\FuzzyTranslationCheck;
+use PublishPress\Translations\Audit\Checks\IdenticalTranslationCheck;
 use PublishPress\Translations\Audit\Checks\PoVersionCheck;
 use PublishPress\Translations\Audit\Checks\PotMismatchCheck;
 use PublishPress\Translations\Audit\Checks\SourceI18nCheck;
@@ -83,6 +84,7 @@ final class Auditor
         $checks = [
             new TextChangeCheck(),
             new EmptyTranslationCheck(),
+            new IdenticalTranslationCheck(),
             new FuzzyTranslationCheck(),
             new PotMismatchCheck(),
             new PoVersionCheck(),

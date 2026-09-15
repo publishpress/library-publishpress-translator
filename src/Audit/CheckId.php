@@ -14,6 +14,8 @@ final class CheckId
 
     public const EMPTY_TRANSLATION = 'empty';
 
+    public const IDENTICAL_TRANSLATION = 'identical';
+
     public const FUZZY_TRANSLATION = 'fuzzy';
 
     public const POT_MISMATCH = 'pot';
@@ -32,6 +34,7 @@ final class CheckId
         return [
             self::TEXT_CHANGE,
             self::EMPTY_TRANSLATION,
+            self::IDENTICAL_TRANSLATION,
             self::FUZZY_TRANSLATION,
             self::POT_MISMATCH,
             self::PO_VERSION,
@@ -51,13 +54,14 @@ final class CheckId
     public static function label(string $id): string
     {
         $map = [
-            self::TEXT_CHANGE         => 'Text change (AI worthiness)',
-            self::EMPTY_TRANSLATION   => 'Empty translations',
-            self::FUZZY_TRANSLATION    => 'Fuzzy translations',
-            self::POT_MISMATCH        => 'POT vs PO mismatch',
-            self::PO_VERSION          => 'PO header',
-            self::SOURCE_I18N         => 'Source strings vs POT',
-            self::TRANSLATION_COUNT   => 'Translation string counts',
+            self::TEXT_CHANGE           => 'Text change (AI worthiness)',
+            self::EMPTY_TRANSLATION     => 'Empty translations',
+            self::IDENTICAL_TRANSLATION => 'Translations identical to source',
+            self::FUZZY_TRANSLATION     => 'Fuzzy translations',
+            self::POT_MISMATCH          => 'POT vs PO mismatch',
+            self::PO_VERSION            => 'PO header',
+            self::SOURCE_I18N           => 'Source strings vs POT',
+            self::TRANSLATION_COUNT     => 'Translation string counts',
         ];
 
         return $map[$id] ?? $id;

@@ -12,6 +12,8 @@ final class IssueSlug
 {
     public const EMPTY_TRANSLATION = 'empty-translation';
 
+    public const IDENTICAL_TRANSLATION = 'identical-translation';
+
     public const FUZZY_TRANSLATION = 'fuzzy-translation';
 
     public const ORPHAN_MSGID = 'orphan-msgid';
@@ -76,6 +78,8 @@ final class IssueSlug
         switch ($checkId) {
             case CheckId::EMPTY_TRANSLATION:
                 return self::EMPTY_TRANSLATION;
+            case CheckId::IDENTICAL_TRANSLATION:
+                return self::IDENTICAL_TRANSLATION;
             case CheckId::FUZZY_TRANSLATION:
                 return self::FUZZY_TRANSLATION;
             case CheckId::POT_MISMATCH:
