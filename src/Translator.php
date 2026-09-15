@@ -11,6 +11,7 @@ namespace PublishPress\Translations;
 use Exception;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
+use PublishPress\Translations\Support\IdenticalTranslationPolicy;
 use PublishPress\Translations\Support\TranslationOverrides;
 
 class Translator
@@ -36,11 +37,7 @@ class Translator
      *
      * @var array
      */
-    private $skippedLanguages = [
-        'it_IT',
-        'es_ES',
-        'fr_FR',
-    ];
+    private $skippedLanguages = [];
 
     /**
      * Target languages
@@ -48,6 +45,9 @@ class Translator
      * @var array
      */
     private $targetLanguages = [
+        'it_IT',
+        'es_ES',
+        'fr_FR',
         'de_DE',
         'id_ID',
         'fil',
@@ -299,9 +299,10 @@ class Translator
             );
         }
 
-        $name = $this->getPluginNameForExclusion();
-        if ($name === null || $name === '') {
-            $name = $this->getPluginSlug();
+        $exclusionName = $this->getPluginNameForExclusion();
+        $displayName   = $exclusionName;
+        if ($displayName === null || $displayName === '') {
+            $displayName = $this->getPluginSlug();
         }
 
         try {
@@ -312,8 +313,9 @@ class Translator
                 $this->output,
                 $this->getApiKey(),
                 $this->getPluginVersion(),
-                (string) $name,
-                $resolved
+                (string) $displayName,
+                $resolved,
+                $exclusionName
             ))->run();
             $this->writeCliCompletion($start, $ok);
 
@@ -719,6 +721,20 @@ class Translator
         }
 
         return array_values($selectedByWpLocale);
+    }
+
+    /**
+     * Check whether a locale is used only to bootstrap a Weblate component.
+     *
+     * @param string $languageCode Language code from a PO filename or Weblate
+     *                             API response.
+     * @return bool
+     */
+    private function isWeblateBootstrapLanguage($languageCode)
+    {
+        $normalized = str_replace('-', '_', (string) $languageCode);
+
+        return strcasecmp($normalized, 'en_US') === 0;
     }
 
     /**
@@ -2190,7 +2206,12 @@ class Translator
         if ($this->customTargetLanguages) {
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages) && !in_array($matches[1], $this->skippedLanguages)) {
+                if (
+                    isset($matches[1])
+                    && in_array($matches[1], $this->targetLanguages)
+                    && !in_array($matches[1], $this->skippedLanguages)
+                    && !$this->isWeblateBootstrapLanguage($matches[1])
+                ) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -2205,7 +2226,11 @@ class Translator
             // Filter out skipped languages from all PO files
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && !in_array($matches[1], $this->skippedLanguages)) {
+                if (
+                    isset($matches[1])
+                    && !in_array($matches[1], $this->skippedLanguages)
+                    && !$this->isWeblateBootstrapLanguage($matches[1])
+                ) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -2589,6 +2614,12 @@ class Translator
                 }
             }
 
+            $languagesToDownload = array_values(array_filter(
+                $languagesToDownload,
+                function ($languageCode) {
+                    return !$this->isWeblateBootstrapLanguage($languageCode);
+                }
+            ));
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
             $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
 
@@ -2743,33 +2774,10 @@ class Translator
             return;
         }
 
-        // Build set of words that are intentionally kept as-is
-        $protectedWords = [];
-
-        // 1. Dictionary defaults
-        $dictDefaults = $this->loadDictionaryDefaults();
-        foreach ($dictDefaults as $source => $target) {
-            if (strcasecmp($source, $target) === 0) {
-                $protectedWords[strtolower($source)] = true;
-            }
-        }
-
-        // 2. Plugin name
-        $pluginName = $this->getPluginNameForExclusion();
-        if ($pluginName) {
-            $protectedWords[strtolower($pluginName)] = true;
-        }
-
-        // 3. Current env var overrides for this language
-        if ($language !== null) {
-            $envOverrides = $this->getOverridesForLanguage($language);
-            foreach ($envOverrides as $source => $target) {
-                if (strcasecmp($source, $target) === 0) {
-                    $protectedWords[strtolower($source)] = true;
-                }
-            }
-        }
-
+        $policy = new IdenticalTranslationPolicy(
+            $language !== null ? $language : '',
+            (string) $this->getPluginNameForExclusion()
+        );
         $lines  = explode("\n", $content);
         $result = [];
 
@@ -2792,7 +2800,7 @@ class Translator
                     $msgstr = $msgstrMatch[1];
 
                     if ($msgid === $msgstr && $msgid !== '') {
-                        if (!isset($protectedWords[strtolower($msgid)])) {
+                        if (!$policy->isProtected($msgid) && !$policy->isLinkOnly($msgid)) {
                             $commentIndex = count($result) - 1;
                             while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
                                 $commentIndex--;

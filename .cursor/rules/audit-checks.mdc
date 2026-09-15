@@ -1,0 +1,38 @@
+---
+description: How to add or change translation audit checks
+globs: src/Audit/**
+alwaysApply: false
+---
+
+# Audit checks
+
+## Checklist (new check)
+
+1. `Checks/MyCheck.php` — `final`, implements `AuditCheckInterface`.
+2. `CheckId::MY_*` + `all()` + `label()`.
+3. `IssueSlug` constants for each finding type.
+4. Register in `Auditor` `$checks` array (order = run order).
+5. `bin/publishpress-translate` `--help` + README if user-facing.
+
+## `run(AuditContext $ctx)` pattern
+
+- Read paths from `$ctx->languagesDir()`, `$ctx->pluginRoot()`, `$ctx->targetLanguages()`.
+- Parse PO via `PoFile::fromFile($path, $ctx->options()->strictPo())` — catch parse errors → `AuditFinding` warning + `IssueSlug::PO_PARSE_ERROR`.
+- Respect overrides: `TranslationOverrides::mapForLanguage($locale)` where empty counts apply.
+- Return `AuditFinding[]` only; no writes unless check is `TextChangeCheck` (revert path).
+
+## Severity
+
+- `info` — advisory (e.g. no POT).
+- `warning` — should fix; may still exit 0.
+- `error` — fails audit run.
+
+## Text check only
+
+- AI: `AiWorthinessJudge`; cost via `AuditOptions::maxCostUsd()`.
+- Interactive / allow-edit / report: `AuditOptions` modes; only this check mutates PO.
+
+## Reports
+
+- CLI: short `message` + optional preview in message.
+- Files: `reportSummary` headline + `reportDetailLines` full list (no truncation in details).

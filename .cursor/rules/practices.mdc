@@ -1,0 +1,58 @@
+---
+description: Established and target engineering practices for this library
+alwaysApply: true
+---
+
+# Practices — keep and extend
+
+## Architecture (established)
+
+- **Audit = strategy**: one `AuditCheckInterface` class per concern; register only in `Auditor`.
+- **IDs**: `CheckId` (CLI `--audit-only`) and `IssueSlug` (reports/filters) — constants, not magic strings.
+- **Options**: `AuditOptions` immutable via `with*()`; validate on build (`InvalidArgumentException`).
+- **Context**: pass `AuditContext` into `run()`; no globals for plugin root, languages dir, or API key.
+- **Findings**: build `AuditFinding` with `issueSlug`; use `reportSummary` / `reportDetailLines` for file reports; CLI text can differ.
+- **DRY across Translator + audit**: shared helpers in `src/Support/` and `src/Audit/Support/` (e.g. `TranslationOverrides`, `PoFile`).
+- **Renderers**: new report format → `AuditReportRendererInterface` + `AuditReportRendererFactory` + `AuditReportFormat`.
+- **CLI output**: use `Output` (banner, phases, bullets) — not ad-hoc `echo` in audit checks.
+
+## God files (aspirational — important)
+
+- **`src/Translator.php` is legacy god file** (~3000 lines). **Do not grow it** for new behavior.
+- **New features**: new focused class under `src/` (e.g. Weblate runner, PO tools), thin delegation from `Translator`.
+- **Refactors welcome** when touching an area: extract method cluster → class, leave `Translator` as facade.
+
+## Potomatic (hard rule)
+
+- **`potomatic/` is external** — bundled upstream, **read-only** in this repo.
+- **Never** edit JS under `potomatic/` (src, config, tests, package.json).
+- Translation/AI behavior changes → **PHP** (`Translator`, dictionaries, audit) or **upstream Potomatic release**, not local patches.
+
+## PHP constraints
+
+- Minimum **PHP 7.2.5** per `composer.json`.
+- Avoid without fallback: typed properties, arrows, `??=`, unions, `match`, named args, `str_contains` / `str_starts_with` / `str_ends_with`.
+- Prefer **`final`** on concrete audit/support classes; interfaces for extension (`AuditCheckInterface`, `AuditReportRendererInterface`).
+- **PSR-12** + PublishPress PHPCS; run `composer check:cs` and `check:php` (compat matrix).
+
+## Safety
+
+- **Never commit** `.env`, API keys, tokens.
+- **OpenAI / Weblate**: dry-run or exit early when keys missing (live translate).
+- **Cost limits**: respect `--audit-max-cost` and Potomatic `--max-cost`.
+- **Subprocess**: `escapeshellarg` for all user-derived shell args.
+- **Audit in CI**: non-TTY / `CI` → report-only (no interactive prompts).
+
+## When adding public behavior
+
+- Update **CheckId + help + README** together for audit flags.
+- PHP unit tests for audit when added (none yet).
+
+## Anti-patterns
+
+- Duplicating override or PO parsing logic outside shared support classes.
+- New 200+ line methods in `Translator.php`.
+- Raw `echo` in audit checks (use `Output` via context).
+- Growing `Auditor::run()` with check logic — belongs in check class.
+- **Any edit under `potomatic/`** (including “small” prompt or retry fixes).
+- Fixing translation bugs in JS instead of PHP integration or dependency upgrade.

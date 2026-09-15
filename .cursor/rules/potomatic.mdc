@@ -1,0 +1,28 @@
+---
+description: Potomatic is external — do not edit potomatic/
+globs: potomatic/**
+alwaysApply: false
+---
+
+# Potomatic — external dependency (read-only)
+
+`potomatic/` is a **bundled copy of upstream Potomatic** (GravityKit). **Do not edit** files under `potomatic/` in this repo.
+
+- No fixes, prompts, providers, tests, or config changes in `potomatic/`.
+- Need different AI/batch behavior → change **upstream Potomatic** or bump the vendored copy via maintainer workflow — **not** agent edits here.
+
+## What agents may change (PHP only)
+
+- `src/Translator.php` — `buildCommand()`, flags passed to CLI, dictionary temp dir, paths via `getPotomaticPath()`
+- `scripts/setup-potomatic.php` — install `node_modules` only (if packaging changes)
+- `composer.json` `setup-potomatic` script — install hook only
+
+## Integration reference (read-only)
+
+PHP invokes `potomatic.js` with e.g. `--target-languages`, `--pot-file-path`, `--output-dir`, `--po-file-prefix`, `--model`, `--batch-size`, `--jobs`, `--max-cost`, `--api-key`, optional `--use-dictionary` + `--dictionary-path`.
+
+PublishPress-specific terms: `config/dictionaries.json` + env overrides → temp dictionary JSON for Potomatic (built in PHP, not in `potomatic/config/`).
+
+## If task sounds like “fix Potomatic”
+
+Stop. Implement in PHP (wrappers, post-process PO, audit checks, Weblate flow) or escalate dependency update. **Never patch `potomatic/src`.**
