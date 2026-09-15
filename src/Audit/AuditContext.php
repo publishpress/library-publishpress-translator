@@ -33,6 +33,9 @@ final class AuditContext
     /** @var string */
     private $pluginDisplayName;
 
+    /** @var string|null */
+    private $pluginExclusionName;
+
     /** @var AuditOptions */
     private $options;
 
@@ -51,7 +54,8 @@ final class AuditContext
         ?string $pluginVersion,
         string $pluginDisplayName,
         AuditOptions $options,
-        string $gitBase = 'HEAD'
+        string $gitBase = 'HEAD',
+        ?string $pluginExclusionName = null
     ) {
         $this->pluginRoot         = $pluginRoot;
         $this->languagesDir       = $languagesDir;
@@ -60,6 +64,7 @@ final class AuditContext
         $this->apiKey             = $apiKey;
         $this->pluginVersion      = $pluginVersion;
         $this->pluginDisplayName  = $pluginDisplayName;
+        $this->pluginExclusionName = $pluginExclusionName;
         $this->options            = $options;
         $this->gitBase            = $gitBase;
     }
@@ -100,6 +105,11 @@ final class AuditContext
     public function pluginDisplayName(): string
     {
         return $this->pluginDisplayName;
+    }
+
+    public function pluginExclusionName(): ?string
+    {
+        return $this->pluginExclusionName;
     }
 
     public function options(): AuditOptions

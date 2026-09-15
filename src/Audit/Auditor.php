@@ -10,6 +10,7 @@ namespace PublishPress\Translations\Audit;
 
 use PublishPress\Translations\Audit\Checks\EmptyTranslationCheck;
 use PublishPress\Translations\Audit\Checks\FuzzyTranslationCheck;
+use PublishPress\Translations\Audit\Checks\IdenticalTranslationCheck;
 use PublishPress\Translations\Audit\Checks\PoVersionCheck;
 use PublishPress\Translations\Audit\Checks\PotMismatchCheck;
 use PublishPress\Translations\Audit\Checks\SourceI18nCheck;
@@ -40,6 +41,9 @@ final class Auditor
     /** @var string */
     private $pluginDisplayName;
 
+    /** @var string|null */
+    private $pluginExclusionName;
+
     /** @var AuditOptions */
     private $options;
 
@@ -54,7 +58,8 @@ final class Auditor
         ?string $apiKey,
         ?string $pluginVersion,
         string $pluginDisplayName,
-        AuditOptions $options
+        AuditOptions $options,
+        ?string $pluginExclusionName = null
     ) {
         $this->pluginRoot         = $pluginRoot;
         $this->languagesDir       = $languagesDir;
@@ -63,6 +68,7 @@ final class Auditor
         $this->apiKey             = $apiKey;
         $this->pluginVersion      = $pluginVersion;
         $this->pluginDisplayName  = $pluginDisplayName;
+        $this->pluginExclusionName = $pluginExclusionName;
         $this->options            = $options;
     }
 
@@ -77,12 +83,14 @@ final class Auditor
             $this->pluginVersion,
             $this->pluginDisplayName,
             $this->options,
-            'HEAD'
+            'HEAD',
+            $this->pluginExclusionName
         );
 
         $checks = [
             new TextChangeCheck(),
             new EmptyTranslationCheck(),
+            new IdenticalTranslationCheck(),
             new FuzzyTranslationCheck(),
             new PotMismatchCheck(),
             new PoVersionCheck(),
