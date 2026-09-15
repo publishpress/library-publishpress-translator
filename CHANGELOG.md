@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[1.6.0] - 15 Sept, 2026
+
+- Improve: Improve translations audition to catch "translated" strings that are the same as the original string, #132
+- Added: Add new GitHub workflow for Dependabot triage, #134
+- Added: Add parser-based audit detection for translations identical to their source, #143
+- Update: Don't skip es_ES, fr_FR and it_IT, #142
+- Fixed: Exclude en_US from Weblate translation sync, #141
+
 [1.5.0] - 19 May, 2026
 
 - Added: New `--verbose` flag to enable debug/verbose output. Details such as POT upload failures are now hidden by default and only shown when `--verbose` is passed.
