@@ -299,9 +299,10 @@ class Translator
             );
         }
 
-        $name = $this->getPluginNameForExclusion();
-        if ($name === null || $name === '') {
-            $name = $this->getPluginSlug();
+        $exclusionName = $this->getPluginNameForExclusion();
+        $displayName   = $exclusionName;
+        if ($displayName === null || $displayName === '') {
+            $displayName = $this->getPluginSlug();
         }
 
         try {
@@ -312,8 +313,9 @@ class Translator
                 $this->output,
                 $this->getApiKey(),
                 $this->getPluginVersion(),
-                (string) $name,
-                $resolved
+                (string) $displayName,
+                $resolved,
+                $exclusionName
             ))->run();
             $this->writeCliCompletion($start, $ok);
 

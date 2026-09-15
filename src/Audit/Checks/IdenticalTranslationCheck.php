@@ -36,7 +36,7 @@ final class IdenticalTranslationCheck implements AuditCheckInterface
         $dir      = $ctx->languagesDir();
 
         foreach ($ctx->targetLanguages() as $locale) {
-            $policy = new IdenticalTranslationPolicy($locale, $ctx->pluginDisplayName());
+            $policy = new IdenticalTranslationPolicy($locale, (string) $ctx->pluginExclusionName());
             $files  = glob($dir . '/*-' . $locale . '.po') ?: [];
 
             foreach ($files as $file) {

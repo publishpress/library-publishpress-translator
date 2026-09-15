@@ -41,6 +41,9 @@ final class Auditor
     /** @var string */
     private $pluginDisplayName;
 
+    /** @var string|null */
+    private $pluginExclusionName;
+
     /** @var AuditOptions */
     private $options;
 
@@ -55,7 +58,8 @@ final class Auditor
         ?string $apiKey,
         ?string $pluginVersion,
         string $pluginDisplayName,
-        AuditOptions $options
+        AuditOptions $options,
+        ?string $pluginExclusionName = null
     ) {
         $this->pluginRoot         = $pluginRoot;
         $this->languagesDir       = $languagesDir;
@@ -64,6 +68,7 @@ final class Auditor
         $this->apiKey             = $apiKey;
         $this->pluginVersion      = $pluginVersion;
         $this->pluginDisplayName  = $pluginDisplayName;
+        $this->pluginExclusionName = $pluginExclusionName;
         $this->options            = $options;
     }
 
@@ -78,7 +83,8 @@ final class Auditor
             $this->pluginVersion,
             $this->pluginDisplayName,
             $this->options,
-            'HEAD'
+            'HEAD',
+            $this->pluginExclusionName
         );
 
         $checks = [
