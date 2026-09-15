@@ -721,6 +721,20 @@ class Translator
     }
 
     /**
+     * Check whether a locale is used only to bootstrap a Weblate component.
+     *
+     * @param string $languageCode Language code from a PO filename or Weblate
+     *                             API response.
+     * @return bool
+     */
+    private function isWeblateBootstrapLanguage($languageCode)
+    {
+        $normalized = str_replace('-', '_', (string) $languageCode);
+
+        return strcasecmp($normalized, 'en_US') === 0;
+    }
+
+    /**
      * Dedupe Weblate language codes
      *
      * @param array $languageCodes
@@ -2189,7 +2203,12 @@ class Translator
         if ($this->customTargetLanguages) {
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && in_array($matches[1], $this->targetLanguages) && !in_array($matches[1], $this->skippedLanguages)) {
+                if (
+                    isset($matches[1])
+                    && in_array($matches[1], $this->targetLanguages)
+                    && !in_array($matches[1], $this->skippedLanguages)
+                    && !$this->isWeblateBootstrapLanguage($matches[1])
+                ) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -2204,7 +2223,11 @@ class Translator
             // Filter out skipped languages from all PO files
             foreach ($allPoFiles as $poFile) {
                 preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
-                if (isset($matches[1]) && !in_array($matches[1], $this->skippedLanguages)) {
+                if (
+                    isset($matches[1])
+                    && !in_array($matches[1], $this->skippedLanguages)
+                    && !$this->isWeblateBootstrapLanguage($matches[1])
+                ) {
                     $poFilesToUpload[] = $poFile;
                 }
             }
@@ -2588,6 +2611,12 @@ class Translator
                 }
             }
 
+            $languagesToDownload = array_values(array_filter(
+                $languagesToDownload,
+                function ($languageCode) {
+                    return !$this->isWeblateBootstrapLanguage($languageCode);
+                }
+            ));
             $languagesToDownload = $this->dedupeWeblateLanguageCodes($languagesToDownload);
             $languagesToDownload = $this->selectWeblateLanguagesForDownload($languagesToDownload);
 
