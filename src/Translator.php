@@ -9,6 +9,7 @@
 namespace PublishPress\Translations;
 
 use Exception;
+use InvalidArgumentException;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
 use PublishPress\Translations\Support\IdenticalTranslationPolicy;
@@ -123,8 +124,12 @@ class Translator
      * Default Potomatic AI settings
      */
     private const DEFAULT_AI_MODEL = 'gpt-4o-mini';
-    private const DEFAULT_AI_BATCH_SIZE = 20;
-    private const DEFAULT_AI_JOBS = 2;
+    private const DEFAULT_AI_BATCH_SIZE = 40;
+    private const DEFAULT_AI_JOBS = 8;
+    private const MIN_AI_BATCH_SIZE = 1;
+    private const MAX_AI_BATCH_SIZE = 100;
+    private const MIN_AI_JOBS = 1;
+    private const MAX_AI_JOBS = 10;
     private const DEFAULT_AI_MAX_COST = 5.0;
     private const DEFAULT_AI_VERBOSE_LEVEL = 2;
 
@@ -198,12 +203,67 @@ class Translator
         }
 
         $this->auditOptions = AuditOptions::defaults();
+        $this->applyPotomaticConcurrencyFromEnv();
 
         $envExcludePaths = getenv('AUDIT_SOURCE_EXCLUDE_PATHS');
         if ($envExcludePaths !== false && $envExcludePaths !== '') {
             $paths = array_values(array_filter(array_map('trim', explode(',', $envExcludePaths))));
             $this->auditOptions = $this->auditOptions->withSourceExcludePaths($paths);
         }
+    }
+
+    /**
+     * Apply AI_JOBS and AI_BATCH_SIZE when set. Bounds match Potomatic.
+     *
+     * @throws InvalidArgumentException
+     */
+    private function applyPotomaticConcurrencyFromEnv()
+    {
+        $jobs = getenv('AI_JOBS');
+        if ($jobs !== false && $jobs !== '') {
+            $this->potomaticSettings['jobs'] = $this->parseBoundedInt(
+                $jobs,
+                'AI_JOBS',
+                self::MIN_AI_JOBS,
+                self::MAX_AI_JOBS
+            );
+        }
+
+        $batchSize = getenv('AI_BATCH_SIZE');
+        if ($batchSize !== false && $batchSize !== '') {
+            $this->potomaticSettings['batch_size'] = $this->parseBoundedInt(
+                $batchSize,
+                'AI_BATCH_SIZE',
+                self::MIN_AI_BATCH_SIZE,
+                self::MAX_AI_BATCH_SIZE
+            );
+        }
+    }
+
+    /**
+     * @param string $value
+     * @param string $name
+     * @param int    $min
+     * @param int    $max
+     * @return int
+     * @throws InvalidArgumentException
+     */
+    private function parseBoundedInt($value, $name, $min, $max)
+    {
+        if (!is_string($value) || !preg_match('/^-?\d+$/', trim($value))) {
+            throw new InvalidArgumentException(
+                sprintf('%s must be an integer from %d to %d.', $name, $min, $max)
+            );
+        }
+
+        $parsed = (int) trim($value);
+        if ($parsed < $min || $parsed > $max) {
+            throw new InvalidArgumentException(
+                sprintf('%s must be an integer from %d to %d.', $name, $min, $max)
+            );
+        }
+
+        return $parsed;
     }
 
     /**
@@ -2845,6 +2905,8 @@ class Translator
             $this->output->bullet('Skipped languages: ' . implode(', ', $this->skippedLanguages) . ' (human translators)');
         }
         $this->output->bullet('Mode: ' . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION'));
+        $this->output->bullet('Parallel languages: ' . (int) $this->potomaticSettings['jobs']);
+        $this->output->bullet('Strings per request: ' . (int) $this->potomaticSettings['batch_size']);
         $this->output->bullet('Weblate: ' . ($this->weblateEnabled ? 'enabled' : 'disabled'));
         $this->output->blankLine();
         $this->output->separator();

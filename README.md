@@ -203,6 +203,20 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
+- **`AI_JOBS`** (optional, default: `8`)
+  How many target languages Potomatic translates at once. Range `1`–`10` (Potomatic’s cap). The default language list has 38 locales, so `8` finishes a full run in about five waves instead of nineteen.
+
+  ```bash
+  export AI_JOBS=10
+  ```
+
+- **`AI_BATCH_SIZE`** (optional, default: `40`)
+  How many strings go in one API request. Range `1`–`100`. Larger batches mean fewer sequential requests per language. A failed batch is retried as a whole, so very large batches can cost more time when the model returns broken XML.
+
+  ```bash
+  export AI_BATCH_SIZE=20
+  ```
+
 - **`SKIP_LANGUAGES`** (optional, default: none)
   Comma-separated list of language codes to skip during translation and upload (downloads are still allowed).
   Use this for languages that are handled by human translators on Weblate instead of AI.

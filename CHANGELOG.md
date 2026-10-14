@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[Unreleased]
+
+- Improve: Translate more languages at once (8 parallel jobs, 40 strings per request) so a full run spends less time waiting on the API. Override with `AI_JOBS` (1–10) and `AI_BATCH_SIZE` (1–100).
+
 [1.6.0] - 15 Sept, 2026
 
 - Improve: Improve translations audition to catch "translated" strings that are the same as the original string, #132
