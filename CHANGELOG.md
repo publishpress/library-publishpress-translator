@@ -5,6 +5,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.6.1] - 14 Oct, 2026
+
 - Improve: Translate more languages at once (8 parallel jobs, 40 strings per request) so a full run spends less time waiting on the API. Override with `AI_JOBS` (1–10) and `AI_BATCH_SIZE` (1–100).
 
 [1.6.0] - 15 Sept, 2026
