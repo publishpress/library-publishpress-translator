@@ -188,6 +188,8 @@ class Translator
             try {
                 $this->weblateClient = new WeblateClient();
                 $this->weblateEnabled = true;
+            } catch (InvalidArgumentException $e) {
+                throw $e;
             } catch (Exception $e) {
                 // Weblate not configured, continue without it
                 $this->weblateEnabled = false;

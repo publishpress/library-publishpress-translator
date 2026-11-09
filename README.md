@@ -69,6 +69,9 @@ Create a `.env` file in your plugin root with your API keys:
 ```
 OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
+# Required for Weblate sync once Cloudflare Access is on weblate.publishpress.com
+# CF_ACCESS_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access
+# CF_ACCESS_CLIENT_SECRET=your-cloudflare-access-client-secret
 ```
 
 The `.env` file is automatically loaded when you run the translation tool. No additional configuration needed.
@@ -77,6 +80,8 @@ Values can be quoted or unquoted:
 ```
 OPENAI_API_KEY="sk-proj-your-openai-key"
 WEBLATE_API_TOKEN='wlu_your-weblate-token'
+# CF_ACCESS_CLIENT_ID="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access"
+# CF_ACCESS_CLIENT_SECRET="your-cloudflare-access-client-secret"
 ```
 
 Alternatively, you can set environment variables directly in your shell:
@@ -85,24 +90,33 @@ Alternatively, you can set environment variables directly in your shell:
 ```powershell
 $env:OPENAI_API_KEY="sk-proj-your-openai-key"
 $env:WEBLATE_API_TOKEN="wlu_your-weblate-token"
+# $env:CF_ACCESS_CLIENT_ID="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access"
+# $env:CF_ACCESS_CLIENT_SECRET="your-cloudflare-access-client-secret"
 ```
 
 **Windows (CMD):**
 ```cmd
 set OPENAI_API_KEY=sk-proj-your-openai-key
 set WEBLATE_API_TOKEN=wlu_your-weblate-token
+REM set CF_ACCESS_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access
+REM set CF_ACCESS_CLIENT_SECRET=your-cloudflare-access-client-secret
 ```
 
 **Mac/Linux:**
 ```bash
 export OPENAI_API_KEY=sk-proj-your-openai-key
 export WEBLATE_API_TOKEN=wlu_your-weblate-token
+# export CF_ACCESS_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access
+# export CF_ACCESS_CLIENT_SECRET=your-cloudflare-access-client-secret
 ```
 
 Or create a `.env` file in your plugin root (don't commit this!):
 ```
 OPENAI_API_KEY=sk-proj-your-openai-key
 WEBLATE_API_TOKEN=wlu_your-weblate-token
+# Required for Weblate sync once Cloudflare Access is on weblate.publishpress.com
+# CF_ACCESS_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access
+# CF_ACCESS_CLIENT_SECRET=your-cloudflare-access-client-secret
 # Optional: short plugin description for translation audit AI text check (see Additional configuration)
 # PLUGIN_AI_CONTEXT=PublishPress Future — schedule and automate post status changes.
 # Optional: exclude source paths from source-i18n audit check (comma-separated fragments)
@@ -111,9 +125,23 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 > **Note:** Shell environment variables take precedence over `.env` file values.
 
 **Get your Weblate API token:**
-1. Sign up at [weblate.publishpress.com](https://weblate.publishpress.com/)
-2. Go to your profile: https://weblate.publishpress.com/accounts/profile/#api
-3. Copy your personal API key
+1. Ask for a Weblate account (public registration is not the path).
+2. Open your profile: https://weblate.publishpress.com/accounts/profile/#api
+3. Copy your personal API token (`wlu_…`). Do not share one admin token across the team.
+
+**Cloudflare Access service token** (same for every developer; not git):
+
+These are **not** a Cloudflare API token (`My Profile → API Tokens`) and **not** the Weblate `wlu_` token.
+
+**Developers:** ask Anderson for the pair. Put both values in the **plugin** `.env` (the plugin you run `composer translate` from), or omit both until Access is on. Shell environment variables also work; shell wins over `.env`.
+
+**Create the pair (Anderson / Cloudflare admin):**
+1. Cloudflare Zero Trust → **Access** → **Service credentials** → **Service Tokens** → Create. Suggested name: `weblate-translator-cli`.
+2. Copy **Client ID** → `CF_ACCESS_CLIENT_ID` (ends in `.access`). Copy **Client Secret** → `CF_ACCESS_CLIENT_SECRET` (shown once).
+3. Store the pair in the team secret store, then give it to each developer.
+4. On the Weblate Access app, add a **Service Auth** policy that allows this token. Headers do nothing until that policy exists. Do not enable Access on `weblate.publishpress.com` until this token exists and this library version is what developers run.
+
+The CLI sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret`. They never go in `Authorization` — that header is the Weblate token.
 
 ### Additional configuration
 
@@ -142,7 +170,10 @@ The following environment variables control advanced behaviour:
   - You can still generate local translations.
   - Upload/download with Weblate will be skipped and a warning will be printed.
 
-- **`WEBLATE_API_URL`** (optional, default: `https://hosted.weblate.org/api/`)
+- **`CF_ACCESS_CLIENT_ID`** and **`CF_ACCESS_CLIENT_SECRET`** (optional until Cloudflare Access is on weblate.publishpress.com; then required for Weblate sync)
+  Shared Access service token. Sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`. Setting only one of the two is an error (the CLI exits; it does not silently skip Weblate). Leave both unset while Access is off so existing `.env` files keep working. A leftover `CF_ACCESS_*` in your shell wins over `.env` and will be sent, or will fail the incomplete-token check.
+
+- **`WEBLATE_API_URL`** (optional, default: `https://weblate.publishpress.com/api/`)
   Set this to your Weblate base URL (ending in `/api/`) when using a self-hosted instance.
 
 - **`WEBLATE_SKIP_VCS`** (optional, default: `true`)
@@ -643,12 +674,16 @@ Set your API keys permanently:
 ```powershell
 [System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-your-key', 'User')
 [System.Environment]::SetEnvironmentVariable('WEBLATE_API_TOKEN', 'wlu_your-token', 'User')
+# [System.Environment]::SetEnvironmentVariable('CF_ACCESS_CLIENT_ID', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access', 'User')
+# [System.Environment]::SetEnvironmentVariable('CF_ACCESS_CLIENT_SECRET', 'your-cloudflare-access-client-secret', 'User')
 ```
 
 **Mac/Linux (add to ~/.bashrc or ~/.zshrc):**
 ```bash
 export OPENAI_API_KEY=sk-proj-your-key
 export WEBLATE_API_TOKEN=wlu_your-token
+# export CF_ACCESS_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access
+# export CF_ACCESS_CLIENT_SECRET=your-cloudflare-access-client-secret
 ```
 
 ## Troubleshooting
@@ -669,6 +704,10 @@ Make sure you've set the environment variable before running live translations.
 ### "Weblate not configured" Error
 
 This appears when running `--download` without `WEBLATE_API_TOKEN` set. Weblate integration is optional for generation but required for download.
+
+### "Cloudflare Access service token is incomplete"
+
+Both `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` must be set, or both omitted. Setting only one is rejected. Developers get the pair from Anderson (team secret store). Admins create it in Cloudflare Zero Trust → Access → Service credentials, not under API Tokens. Do not invent values or put them in `Authorization`.
 
 ### "No .pot files found" Error
 

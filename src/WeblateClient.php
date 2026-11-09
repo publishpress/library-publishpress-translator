@@ -11,6 +11,7 @@ namespace PublishPress\Translations;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Exception;
+use InvalidArgumentException;
 
 class WeblateClient
 {
@@ -60,13 +61,59 @@ class WeblateClient
 
         $this->client = new Client([
             'base_uri' => $this->apiUrl,
-            'headers' => [
-                'Authorization' => 'Token ' . $this->apiToken,
-                'Accept' => 'application/json',
-            ],
+            'headers' => $this->requestHeaders(),
             'timeout' => (int) $timeout,
             'connect_timeout' => (int) $timeout,
         ]);
+    }
+
+    /**
+     * Weblate token stays in Authorization. Cloudflare Access uses its own
+     * headers so a service token can pass Access without colliding with Weblate.
+     *
+     * @return array<string, string>
+     * @throws InvalidArgumentException
+     */
+    private function requestHeaders()
+    {
+        $headers = [
+            'Authorization' => 'Token ' . $this->apiToken,
+            'Accept' => 'application/json',
+        ];
+
+        $accessId = $this->trimmedEnv('CF_ACCESS_CLIENT_ID');
+        $accessSecret = $this->trimmedEnv('CF_ACCESS_CLIENT_SECRET');
+        $hasId = $accessId !== '';
+        $hasSecret = $accessSecret !== '';
+
+        if ($hasId !== $hasSecret) {
+            throw new InvalidArgumentException(
+                "Cloudflare Access service token is incomplete.\n" .
+                    "Set both CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET.\n" .
+                    "Do not put those values in Authorization; Weblate uses that header."
+            );
+        }
+
+        if ($hasId) {
+            $headers['CF-Access-Client-Id'] = $accessId;
+            $headers['CF-Access-Client-Secret'] = $accessSecret;
+        }
+
+        return $headers;
+    }
+
+    /**
+     * @param string $name
+     * @return string
+     */
+    private function trimmedEnv($name)
+    {
+        $value = getenv($name);
+        if ($value === false) {
+            return '';
+        }
+
+        return trim((string) $value);
     }
 
     /**
