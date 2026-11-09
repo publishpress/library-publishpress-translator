@@ -5,6 +5,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.6.2] - 9 Nov, 2026
+
 - Added: Optional Cloudflare Access service token headers (`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`) so Weblate CLI sync still works when Access is in front of weblate.publishpress.com.
 
 [1.6.1] - 14 Oct, 2026
