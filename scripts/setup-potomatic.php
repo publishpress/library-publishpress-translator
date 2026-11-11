@@ -61,7 +61,14 @@ $descriptorSpec = [
     1 => ['pipe', 'w'], // stdout
     2 => ['pipe', 'w'], // stderr
 ];
-$process = proc_open("{$npmCommand} install --omit=dev --production", $descriptorSpec, $pipes);
+// PHP 8.3 proc_open() ignores chdir() (posix_spawn). Without an explicit
+// cwd, npm runs in the plugin root and fails resolving reakit vs React 18.
+$process = proc_open(
+    "{$npmCommand} install --omit=dev",
+    $descriptorSpec,
+    $pipes,
+    $potomaticDir
+);
 if (is_resource($process)) {
     while ($line = fgets($pipes[1])) {
         $output->boxedLine(rtrim($line, "\r\n"));
