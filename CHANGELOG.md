@@ -3,9 +3,10 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-[Unreleased]
+[1.6.3] - 18 Nov, 2026
 
 - Fixed: A Weblate download stops when Cloudflare Access returns a login page. The login page is not saved as a PO file.
+- Fixed: Potomatic `npm install` runs in the potomatic directory on PHP 8.3.
 
 [1.6.2] - 9 Nov, 2026
 
