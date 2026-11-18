@@ -5,6 +5,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+- Fixed: A Weblate download stops when Cloudflare Access returns a login page. The login page is not saved as a PO file.
+
 [1.6.2] - 9 Nov, 2026
 
 - Added: Optional Cloudflare Access service token headers (`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`) so Weblate CLI sync still works when Access is in front of weblate.publishpress.com.

@@ -56,3 +56,7 @@ jobs:
       - name: Run PHPCS check
         run: |
           $GITHUB_WORKSPACE/dev-workspace/run composer check:cs
+
+      - name: Reject Cloudflare Access login pages
+        run: |
+          $GITHUB_WORKSPACE/dev-workspace/run php tests/cloudflare-access-response.php

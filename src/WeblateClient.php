@@ -10,8 +10,11 @@ namespace PublishPress\Translations;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use Exception;
 use InvalidArgumentException;
+use Psr\Http\Message\ResponseInterface;
 
 class WeblateClient
 {
@@ -41,9 +44,10 @@ class WeblateClient
      *
      * @param string|null $apiUrl
      * @param string|null $apiToken
+     * @param callable|null $handler Guzzle handler. Tests pass a mock. Callers omit it.
      * @throws Exception
      */
-    public function __construct($apiUrl = null, $apiToken = null)
+    public function __construct($apiUrl = null, $apiToken = null, $handler = null)
     {
         $this->apiUrl = $apiUrl ?: getenv('WEBLATE_API_URL') ?: 'https://weblate.publishpress.com/api/';
         $this->apiToken = $apiToken ?: getenv('WEBLATE_API_TOKEN');
@@ -58,13 +62,88 @@ class WeblateClient
 
         $this->apiUrl = rtrim($this->apiUrl, '/') . '/';
         $timeout = getenv('WEBLATE_API_TIMEOUT') ?: 120;
+        $stack = HandlerStack::create($handler);
+        $stack->unshift(Middleware::mapResponse(function (ResponseInterface $response) {
+            return $this->rejectHtmlResponse($response);
+        }));
 
         $this->client = new Client([
             'base_uri' => $this->apiUrl,
+            'handler' => $stack,
             'headers' => $this->requestHeaders(),
             'timeout' => (int) $timeout,
             'connect_timeout' => (int) $timeout,
         ]);
+    }
+
+    /**
+     * Access answers an API call with HTTP 200 and the login page after a redirect.
+     * Guzzle follows that redirect, so a status check still looks successful.
+     *
+     * @param ResponseInterface $response
+     * @return ResponseInterface
+     * @throws CloudflareAccessException
+     */
+    private function rejectHtmlResponse(ResponseInterface $response)
+    {
+        $body = $response->getBody();
+        $sample = $body->read(8192);
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+
+        $contentType = $response->getHeaderLine('Content-Type');
+        if (!$this->isHtmlResponse($contentType, $sample)) {
+            return $response;
+        }
+
+        throw new CloudflareAccessException($this->htmlRejectedMessage($sample));
+    }
+
+    /**
+     * @param string $contentType
+     * @param string $sample
+     * @return bool
+     */
+    private function isHtmlResponse($contentType, $sample)
+    {
+        if (stripos($contentType, 'text/html') !== false) {
+            return true;
+        }
+
+        $trimmed = ltrim($sample, "\xEF\xBB\xBF \t\r\n");
+
+        return stripos($trimmed, '<!DOCTYPE html') === 0
+            || stripos($trimmed, '<html') === 0;
+    }
+
+    /**
+     * @param string $sample
+     * @return string
+     */
+    private function htmlRejectedMessage($sample)
+    {
+        if (
+            stripos($sample, 'Cloudflare Access') !== false
+            || stripos($sample, 'cloudflareaccess.com') !== false
+        ) {
+            return "Cloudflare Access returned a login page instead of a Weblate response.\n" .
+                "Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the plugin .env file.\n" .
+                "The command does not write that page into a PO file.";
+        }
+
+        return "Weblate returned an HTML page instead of an API response.\n" .
+            "The command does not write that page into a PO file.";
+    }
+
+    /**
+     * @param string $contents
+     * @return bool
+     */
+    private function isPoContent($contents)
+    {
+        return preg_match('/^msgid\s+"/m', $contents) === 1
+            && preg_match('/^msgstr(\[\d+\])?\s+"/m', $contents) === 1;
     }
 
     /**
@@ -1156,7 +1235,15 @@ class WeblateClient
                     "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
                 );
 
-                return $response->getBody()->getContents();
+                $contents = $response->getBody()->getContents();
+                if (!$this->isPoContent($contents)) {
+                    throw new Exception(
+                        "Weblate returned a response that is not a PO file for {$language}.\n" .
+                            "The command does not write that response into the PO file."
+                    );
+                }
+
+                return $contents;
             } catch (GuzzleException $e) {
                 $attempt++;
 

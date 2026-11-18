@@ -2652,6 +2652,8 @@ class Translator
                     }
                     continue;
                 }
+            } catch (CloudflareAccessException $e) {
+                throw $e;
             } catch (Exception $e) {
                 if (!$silent) {
                     fwrite(STDERR, "  ❌ Error checking component: " . $e->getMessage() . "\n\n");
@@ -2667,6 +2669,8 @@ class Translator
             } else {
                 try {
                     $languagesToDownload = $this->weblateClient->getComponentLanguages($projectSlug, $componentSlug);
+                } catch (CloudflareAccessException $e) {
+                    throw $e;
                 } catch (Exception $e) {
                     if (!$silent) {
                         fwrite(STDERR, "  ❌ Error fetching language list from Weblate: " . $e->getMessage() . "\n");
@@ -2721,6 +2725,8 @@ class Translator
                             $this->output->step("{$language} (not available)");
                         }
                     }
+                } catch (CloudflareAccessException $e) {
+                    throw $e;
                 } catch (Exception $e) {
                     if (!$silent) {
                         $this->output->warning("{$language}: " . $e->getMessage());
@@ -2936,6 +2942,8 @@ class Translator
             try {
                 $this->downloadFromWeblate(true);
                 $this->output->step('Existing translations refreshed from Weblate');
+            } catch (CloudflareAccessException $e) {
+                throw $e;
             } catch (Exception $e) {
                 fwrite(STDERR, "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n");
             }
