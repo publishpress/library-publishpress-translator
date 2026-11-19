@@ -338,7 +338,7 @@ vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 # Repair malformed plural entries in existing .po files
 vendor/bin/publishpress-translate --repair-plurals
 
-# Replace printf placeholders that do not match the English source
+# Align printf placeholders and keep the translated sentence
 vendor/bin/publishpress-translate --repair-placeholders
 
 # Clean duplicate entries from all .po files
@@ -374,7 +374,7 @@ Potomatic can add a `%s`, drop a `%1$s`, mix both styles in one string, or write
 vendor/bin/publishpress-translate --repair-placeholders
 ```
 
-A count or type mismatch is replaced with the English source. A spacing or quote-escape error keeps the translation. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
+A count or type mismatch keeps the translated sentence. Extra placeholders are removed. Missing placeholders are appended at the end. A spacing or quote-escape error keeps the translation. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 

@@ -3,9 +3,8 @@
 /**
  * Rewrite .po msgstr values whose printf placeholders cannot be passed to sprintf.
  *
- * A safe renumber keeps the translated words. A count or type mismatch falls back
- * to the English source. That is the same fallback used when a shifted translation
- * cannot be trusted.
+ * A count mismatch keeps the translated words. Extra placeholders are removed.
+ * Missing placeholders are appended. The sentence stays in the target language.
  *
  * @package PublishPress\Translations\Support
  */

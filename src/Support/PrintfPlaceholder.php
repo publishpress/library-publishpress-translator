@@ -64,11 +64,80 @@ final class PrintfPlaceholder
             }
         }
 
+        $kept = self::keepTranslation($quoted, $srcTokens, $dstTokens);
+        if ($kept === $translation) {
+            return [
+                'action' => 'ok',
+                'value'  => $translation,
+                'reason' => '',
+            ];
+        }
+
         return [
-            'action' => 'fallback',
-            'value'  => $source,
-            'reason' => self::mismatchReason($srcTokens, $dstTokens),
+            'action' => 'rewritten',
+            'value'  => $kept,
+            'reason' => 'kept translation; ' . self::mismatchReason($srcTokens, $dstTokens),
         ];
+    }
+
+    /**
+     * Keep the translated words. Copy source placeholders onto matching tokens.
+     * Drop extra tokens. Append source placeholders the translation does not have.
+     *
+     * @param array<int,array{raw:string,index:int|null,type:string,pos:int,invalid:bool}> $src
+     * @param array<int,array{raw:string,index:int|null,type:string,pos:int,invalid:bool}> $dst
+     */
+    private static function keepTranslation(string $translation, array $src, array $dst): string
+    {
+        $srcIndex = 0;
+        $pairs    = [];
+        $usedSrc  = [];
+
+        foreach ($dst as $dstIndex => $dstToken) {
+            if ($dstToken['invalid']) {
+                continue;
+            }
+            $count = count($src);
+            for ($i = $srcIndex; $i < $count; $i++) {
+                if ($src[$i]['invalid']) {
+                    continue;
+                }
+                if ($src[$i]['type'] !== $dstToken['type']) {
+                    continue;
+                }
+                $pairs[$dstIndex] = $src[$i];
+                $usedSrc[$i]      = true;
+                $srcIndex         = $i + 1;
+                break;
+            }
+        }
+
+        $out    = '';
+        $cursor = 0;
+        foreach ($dst as $dstIndex => $dstToken) {
+            $pos = $dstToken['pos'];
+            $out .= substr($translation, $cursor, $pos - $cursor);
+            if (isset($pairs[$dstIndex])) {
+                $out .= $pairs[$dstIndex]['raw'];
+            } elseif ($dstToken['invalid']) {
+                $out .= '%%';
+            }
+            $cursor = $pos + strlen($dstToken['raw']);
+        }
+        $out .= substr($translation, $cursor);
+
+        $missing = [];
+        foreach ($src as $i => $srcToken) {
+            if ($srcToken['invalid'] || isset($usedSrc[$i])) {
+                continue;
+            }
+            $missing[] = $srcToken['raw'];
+        }
+        if ($missing !== []) {
+            $out = rtrim($out) . ' ' . implode(' ', $missing);
+        }
+
+        return $out;
     }
 
     /**
