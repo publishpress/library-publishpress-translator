@@ -9,6 +9,7 @@
 namespace PublishPress\Translations\Audit;
 
 use PublishPress\Translations\Audit\Checks\EmptyTranslationCheck;
+use PublishPress\Translations\Audit\Checks\FormatStringCheck;
 use PublishPress\Translations\Audit\Checks\FuzzyTranslationCheck;
 use PublishPress\Translations\Audit\Checks\IdenticalTranslationCheck;
 use PublishPress\Translations\Audit\Checks\PoVersionCheck;
@@ -96,6 +97,7 @@ final class Auditor
             new PoVersionCheck(),
             new SourceI18nCheck(),
             new TranslationCountCheck(),
+            new FormatStringCheck(),
         ];
 
         $allFindings = [];

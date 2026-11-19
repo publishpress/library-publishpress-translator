@@ -45,6 +45,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
         "translate:force": "vendor/bin/publishpress-translate --force",
         "translate:force-custom": "vendor/bin/publishpress-translate --force --languages",
         "translate:repair-plurals": "vendor/bin/publishpress-translate --repair-plurals",
+        "translate:repair-placeholders": "vendor/bin/publishpress-translate --repair-placeholders",
         "translate:clean-po": "vendor/bin/publishpress-translate --clean-po",
         "translate:sync-files": "vendor/bin/publishpress-translate --sync-files",
         "translate:audit": "vendor/bin/publishpress-translate --audit",
@@ -337,6 +338,9 @@ vendor/bin/publishpress-translate --upload --languages=de_DE,fr_FR
 # Repair malformed plural entries in existing .po files
 vendor/bin/publishpress-translate --repair-plurals
 
+# Replace printf placeholders that do not match the English source
+vendor/bin/publishpress-translate --repair-placeholders
+
 # Clean duplicate entries from all .po files
 vendor/bin/publishpress-translate --clean-po
 
@@ -361,6 +365,16 @@ vendor/bin/publishpress-translate --repair-plurals
 - Splits them into proper separate `msgstr[N]` lines
 
 **Note:** New translations are automatically repaired during the translation process, so you only need this for existing files.
+
+#### Printf placeholders
+
+Potomatic can add a `%s`, drop a `%1$s`, mix both styles in one string, or write `class=\"count\"` with an extra backslash. PHP 8 fatals on the first three when the string is passed to `sprintf`. The same repair runs at the end of translation and after a Weblate download.
+
+```bash
+vendor/bin/publishpress-translate --repair-placeholders
+```
+
+A count or type mismatch is replaced with the English source. A spacing or quote-escape error keeps the translation. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 
@@ -439,6 +453,7 @@ composer translate:audit
 | `version` | `Project-Id-Version` header vs plugin version (advisory; headers are not rewritten by the tool) |
 | `source-i18n` | Statically extractable i18n calls in PHP and JS/JSX source vs POT entries for each text domain |
 | `translation-count` | Translation string counts and coverage per locale |
+| `format` | Printf placeholders and extra backslashes in quotes. A mismatch can fatal under PHP 8. |
 
 **Modes (`--audit-mode`):**
 
@@ -463,7 +478,7 @@ vendor/bin/publishpress-translate --audit --audit-only=text --languages=de_DE
 vendor/bin/publishpress-translate --audit --audit-only=source-i18n
 ```
 
-`--audit-only` accepts a comma-separated list: `text`, `empty`, `identical`, `fuzzy`, `pot`, `version`, `source-i18n`, `translation-count`.
+`--audit-only` accepts a comma-separated list: `text`, `empty`, `identical`, `fuzzy`, `pot`, `version`, `source-i18n`, `translation-count`, `format`.
 
 **Cost control (text check only):**
 

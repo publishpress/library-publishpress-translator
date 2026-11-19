@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[Unreleased]
+
+- Added: `--repair-placeholders` and the `format` audit check. After Potomatic runs, printf placeholders that do not match the source string are rewritten or replaced with the English source. Extra backslashes before quotes in translations are removed. A bad placeholder can fatal on PHP 8.
+
 [1.6.3] - 18 Nov, 2026
 
 - Fixed: A Weblate download stops when Cloudflare Access returns a login page. The login page is not saved as a PO file.

@@ -73,6 +73,8 @@ final class IssueSlug
 
     public const TRANSLATION_COUNT_SUMMARY = 'translation-count-summary';
 
+    public const FORMAT_PLACEHOLDER = 'format-placeholder';
+
     public static function fallbackForCheckId(string $checkId): string
     {
         switch ($checkId) {
@@ -92,6 +94,8 @@ final class IssueSlug
                 return self::SOURCE_STRING_MISSING_FROM_POT;
             case CheckId::TRANSLATION_COUNT:
                 return self::TRANSLATION_COUNT_SUMMARY;
+            case CheckId::FORMAT_STRING:
+                return self::FORMAT_PLACEHOLDER;
             default:
                 return 'audit-issue';
         }

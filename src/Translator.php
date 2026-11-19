@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
 use PublishPress\Translations\Support\IdenticalTranslationPolicy;
+use PublishPress\Translations\Support\PoFormatRepair;
 use PublishPress\Translations\Support\TranslationOverrides;
 
 class Translator
@@ -516,6 +517,84 @@ class Translator
         $this->writeCliCompletion($start, true);
 
         return true;
+    }
+
+    /**
+     * Replace printf placeholders that would fatal in PHP 8, and drop extra quote escapes.
+     *
+     * @return bool
+     */
+    public function repairFormatStrings()
+    {
+        $start = $this->writeCliBannerAndPluginContext();
+        $this->output->phase('Repairing printf placeholders in existing .po files');
+        $this->output->step('Languages directory: ' . $this->languagesDir);
+
+        $poFiles = glob($this->languagesDir . '/*.po');
+
+        if (empty($poFiles)) {
+            fwrite(STDERR, "No .po files found in {$this->languagesDir}\n");
+            $this->writeCliCompletion($start, false);
+
+            return false;
+        }
+
+        $this->output->step('Found ' . count($poFiles) . ' .po file(s)');
+
+        $repaired = 0;
+        foreach ($poFiles as $poFile) {
+            $count = $this->repairPoFormatStrings($poFile, false);
+            if ($count > 0) {
+                $repaired++;
+            }
+        }
+
+        $this->output->separator();
+        if ($repaired > 0) {
+            $this->output->line('Repaired format strings in ' . $repaired . ' file(s).');
+            $this->output->line('Compile .mo / .l10n.php again before you ship.');
+        } else {
+            $this->output->line('No printf placeholder mismatches found.');
+        }
+
+        $this->writeCliCompletion($start, true);
+
+        return true;
+    }
+
+    /**
+     * @return int Number of entries changed. Failed splices count as changes so the log stays visible.
+     */
+    private function repairPoFormatStrings(string $poFile, bool $silent): int
+    {
+        try {
+            $changes = PoFormatRepair::repairFile($poFile);
+        } catch (Exception $e) {
+            if (!$silent) {
+                $this->output->warning(basename($poFile) . ': format repair failed: ' . $e->getMessage());
+            }
+
+            return 0;
+        }
+
+        if ($changes === []) {
+            return 0;
+        }
+
+        if (!$silent) {
+            $this->output->warning(basename($poFile) . ': repaired ' . count($changes) . ' format string(s)');
+            $shown = 0;
+            foreach ($changes as $change) {
+                if ($shown >= 5) {
+                    $this->output->line('  … ' . (count($changes) - $shown) . ' more');
+                    break;
+                }
+                $this->output->line('  ' . $change['action'] . ': ' . $change['reason']);
+                $shown++;
+            }
+        }
+
+        return count($changes);
     }
 
     /**
@@ -2708,6 +2787,8 @@ class Translator
                         // Validate for malformed plural entries and repair if needed
                         $this->validatePluralEntries($poFile);
 
+                        $this->repairPoFormatStrings($poFile, $silent);
+
                         $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
                         $this->weblateClient->removeDuplicateReferences($poFile);
                         $this->weblateClient->removeDuplicateExtractedComments($poFile);
@@ -3050,6 +3131,8 @@ class Translator
 
                         // Validate no malformed entries remain
                         $this->validatePluralEntries($poFile);
+
+                        $this->repairPoFormatStrings($poFile, false);
 
                         $this->revertPluginNameTranslations($poFile);
 

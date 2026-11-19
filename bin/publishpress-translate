@@ -148,6 +148,7 @@ $options = getopt('', [
     'upload',
     'upload-pot',
     'repair-plurals',
+    'repair-placeholders',
     'clean-po',
     'sync-files',
     'audit',
@@ -180,13 +181,14 @@ Options:
   --upload               Upload existing translations to Weblate (no AI translation)
   --upload-pot           Upload only the POT file (source strings) to Weblate, without uploading PO files
   --repair-plurals       Repair malformed plural entries in existing .po files
+  --repair-placeholders  Replace printf placeholders that do not match the source string
   --clean-po             Clean duplicate entries from all .po files
   --sync-files           Check status of .po and compiled formats (.mo, .json, .l10n.php)
   --audit                Audit translations (diff worthiness, empty, identical, fuzzy, POT mismatch, PO header)
   --audit-mode=MODE      interactive (default) | allow-edit | report — prompts/reverts apply only to the AI text-change
                                check; version header and other checks are read-only
   --audit-max-cost=USD   Max OpenAI spend for worthiness judge (default: 5.0)
-  --audit-only=LIST      Comma-separated: text,empty,identical,fuzzy,pot,version,source-i18n,translation-count
+  --audit-only=LIST      Comma-separated: text,empty,identical,fuzzy,pot,version,source-i18n,translation-count,format
                          (default: all)
   --audit-report-format=LIST  Optional. Also write report files: txt (plain UTF-8, CI/logs), ansi (colors), html
                                Comma-separated; multiple files. Aliases: plain,text → txt. Summarized lines still print
@@ -238,6 +240,7 @@ Workflow:
 Maintenance:
   - Clean duplicates:           publishpress-translate --clean-po
   - Fix plural formats:         publishpress-translate --repair-plurals
+  - Fix printf placeholders:    publishpress-translate --repair-placeholders
   - Check compilation status:   publishpress-translate --sync-files
 
 HELP;
@@ -302,7 +305,8 @@ try {
     }
 
     $modeMap = [
-        'repair-plurals' => 'repairPluralEntries',
+        'repair-plurals'       => 'repairPluralEntries',
+        'repair-placeholders'  => 'repairFormatStrings',
         'clean-po'       => 'cleanPoFiles',
         'sync-files'     => 'syncPoAndMoFiles',
         'download'       => 'downloadFromWeblate',
