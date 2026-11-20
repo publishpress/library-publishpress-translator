@@ -501,6 +501,51 @@ class Translator
     }
 
     /**
+     * Print translation cost plus placeholder-repair cost.
+     *
+     * Potomatic already prints its own total inside the boxed log. This line
+     * is the sum for the whole command. Called from translate(), repairFormatStrings(),
+     * and the Weblate download completion.
+     *
+     * @param float $translationUsd
+     */
+    private function writeOpenAiSpend($translationUsd)
+    {
+        $repairUsd = 0.0;
+        if ($this->formatStringFixer !== null) {
+            $repairUsd = $this->formatStringFixer->spentUsd();
+        }
+        if ($translationUsd <= 0 && $repairUsd <= 0) {
+            return;
+        }
+
+        $this->output->line(
+            'OpenAI spent: $' . number_format($translationUsd + $repairUsd, 4)
+            . ' (translation $' . number_format($translationUsd, 4)
+            . ', placeholder repair $' . number_format($repairUsd, 4) . ').'
+        );
+    }
+
+    /**
+     * Read the Potomatic summary line. Per-language lines use a slash after the amount.
+     *
+     * @param string $line
+     * @return float
+     */
+    private function potomaticCostFromLine($line)
+    {
+        $plain = preg_replace('/\x1b\[[0-9;]*m/', '', $line);
+        if (!is_string($plain)) {
+            return 0.0;
+        }
+        if (preg_match('/Total cost:\s*\$([0-9]+\.[0-9]+)\s*\|/', $plain, $matches) !== 1) {
+            return 0.0;
+        }
+
+        return (float) $matches[1];
+    }
+
+    /**
      * Repair malformed plural entries in all existing .po files.
      *
      * Scans every .po file in the languages directory for plural entries where
@@ -592,6 +637,7 @@ class Translator
             $this->output->line('No printf placeholder mismatches found.');
         }
 
+        $this->writeOpenAiSpend(0.0);
         $this->writeCliCompletion($start, true);
 
         return true;
@@ -2886,6 +2932,7 @@ class Translator
         if (!$silent && $start !== null) {
             $this->output->separator();
             $this->output->line('Downloaded ' . $totalDownloaded . ' translation file(s).');
+            $this->writeOpenAiSpend(0.0);
             $this->writeCliCompletion($start, $success);
         }
 
@@ -3125,6 +3172,7 @@ class Translator
         $this->createTempDictionaryDir();
 
         $success = true;
+        $translationUsd = 0.0;
         foreach ($potFiles as $index => $potFile) {
             $potFileName = basename($potFile);
             $textDomain = str_replace('.pot', '', $potFileName);
@@ -3160,6 +3208,7 @@ class Translator
                 if (is_resource($process)) {
                     while ($line = fgets($pipes[1])) {
                         $this->output->boxedLine(rtrim($line, "\r\n"));
+                        $translationUsd += $this->potomaticCostFromLine($line);
                     }
                     while ($line = fgets($pipes[2])) {
                         $this->output->boxedLine(rtrim($line, "\r\n"));
@@ -3244,6 +3293,7 @@ class Translator
         $this->output->separator();
         $this->output->blankLine();
         $this->output->line('Translation ' . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}.");
+        $this->writeOpenAiSpend($translationUsd);
         $this->writeCliCompletion($start, $success);
 
         return $success;
