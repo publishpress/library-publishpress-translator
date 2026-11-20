@@ -252,6 +252,18 @@ The following environment variables control advanced behaviour:
   export AI_JOBS=10
   ```
 
+- **`VERBOSE_LEVEL`** (optional, default: `2`)
+  Potomatic log level. The default stays verbose.
+
+  - `0` — errors
+  - `1` — normal progress
+  - `2` — verbose
+  - `3` — debug
+
+  ```bash
+  export VERBOSE_LEVEL=1
+  ```
+
 - **`AI_BATCH_SIZE`** (optional, default: `40`)
   How many strings go in one API request. Range `1`–`100`. Larger batches mean fewer sequential requests per language. A failed batch is retried as a whole, so very large batches can cost more time when the model returns broken XML.
 

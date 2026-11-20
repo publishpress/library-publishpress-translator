@@ -134,6 +134,8 @@ class Translator
     private const MAX_AI_JOBS = 10;
     private const DEFAULT_AI_MAX_COST = 5.0;
     private const DEFAULT_AI_VERBOSE_LEVEL = 2;
+    private const MIN_AI_VERBOSE_LEVEL = 0;
+    private const MAX_AI_VERBOSE_LEVEL = 3;
 
     /**
      * Potomatic settings
@@ -217,6 +219,7 @@ class Translator
         $this->auditOptions = AuditOptions::defaults();
         $this->applyPotomaticConcurrencyFromEnv();
         $this->applyReasoningEffortFromEnv();
+        $this->applyVerboseLevelFromEnv();
 
         $envExcludePaths = getenv('AUDIT_SOURCE_EXCLUDE_PATHS');
         if ($envExcludePaths !== false && $envExcludePaths !== '') {
@@ -273,6 +276,28 @@ class Translator
         }
 
         $this->potomaticSettings['reasoning_effort'] = $effort;
+    }
+
+    /**
+     * Apply VERBOSE_LEVEL when set. The default stays 2.
+     *
+     * 0 = errors, 1 = normal, 2 = verbose, 3 = debug.
+     *
+     * @throws InvalidArgumentException
+     */
+    private function applyVerboseLevelFromEnv()
+    {
+        $level = getenv('VERBOSE_LEVEL');
+        if ($level === false || $level === '') {
+            return;
+        }
+
+        $this->potomaticSettings['verbose_level'] = $this->parseBoundedInt(
+            $level,
+            'VERBOSE_LEVEL',
+            self::MIN_AI_VERBOSE_LEVEL,
+            self::MAX_AI_VERBOSE_LEVEL
+        );
     }
 
     /**
@@ -3106,6 +3131,10 @@ class Translator
         $this->output->bullet('Reasoning effort: ' . $this->potomaticSettings['reasoning_effort']);
         $this->output->bullet('Parallel languages: ' . (int) $this->potomaticSettings['jobs']);
         $this->output->bullet('Strings per request: ' . (int) $this->potomaticSettings['batch_size']);
+        $this->output->bullet(
+            'Potomatic log: ' . (int) $this->potomaticSettings['verbose_level']
+            . ' (0=errors, 1=normal, 2=verbose, 3=debug)'
+        );
         $this->output->bullet('Weblate: ' . ($this->weblateEnabled ? 'enabled' : 'disabled'));
         $this->output->blankLine();
         $this->output->separator();
