@@ -5,7 +5,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
-- Changed: Bundled Potomatic is publishpress/library-potomatic 1.4.1. The executable is `potomatic`. `potomatic.js` is still accepted. The default model is `gpt-4.1-mini`. Set `REASONING_EFFORT` to pass `--reasoning-effort`. A run that leaves strings untranslated still repairs the written PO files, then exits with an error.
+- Changed: Bundled Potomatic is publishpress/library-potomatic 1.4.1. The executable is `potomatic`. `potomatic.js` is still accepted. The default model is `gpt-6-luna` with reasoning effort `low`. Set `REASONING_EFFORT` to override the effort. A run that leaves strings untranslated still repairs the written PO files, then exits with an error.
+- Changed: Placeholder repair uses the same model and reasoning effort. The repair cost counter uses $0.10 per 1M input tokens and $0.50 per 1M output tokens.
 
 [1.7.0] - 19 Nov, 2026
 

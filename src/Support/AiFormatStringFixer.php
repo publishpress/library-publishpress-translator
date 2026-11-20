@@ -22,12 +22,10 @@ use GuzzleHttp\Exception\GuzzleException;
 
 final class AiFormatStringFixer
 {
-    private const MODEL = 'gpt-4o-mini';
-
-    /** Same list price as the audit judge for gpt-4o-mini. */
-    private const PRICE_INPUT_PER_1M = 0.15;
-
-    private const PRICE_OUTPUT_PER_1M = 0.60;
+    /**
+     * Room for the JSON reply plus reasoning tokens. The effort shares this budget.
+     */
+    private const MAX_COMPLETION_TOKENS = 8192;
 
     /** @var Client */
     private $http;
@@ -155,10 +153,11 @@ final class AiFormatStringFixer
                     'Content-Type'  => 'application/json',
                 ],
                 'json'    => [
-                    'model'           => self::MODEL,
-                    'temperature'     => 0,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages'        => [
+                    'model'                 => AiModel::NAME,
+                    'reasoning_effort'      => AiModel::REASONING_EFFORT,
+                    'max_completion_tokens' => self::MAX_COMPLETION_TOKENS,
+                    'response_format'       => ['type' => 'json_object'],
+                    'messages'              => [
                         ['role' => 'system', 'content' => $system],
                         ['role' => 'user', 'content' => $user],
                     ],
@@ -236,8 +235,8 @@ final class AiFormatStringFixer
         }
         $in  = (int) ($usage['prompt_tokens'] ?? 0);
         $out = (int) ($usage['completion_tokens'] ?? 0);
-        $this->spentUsd += ($in / 1000000.0) * self::PRICE_INPUT_PER_1M
-            + ($out / 1000000.0) * self::PRICE_OUTPUT_PER_1M;
+        $this->spentUsd += ($in / 1000000.0) * AiModel::PRICE_INPUT_PER_1M
+            + ($out / 1000000.0) * AiModel::PRICE_OUTPUT_PER_1M;
         if ($this->spentUsd >= $this->maxUsd) {
             $this->capped = true;
         }

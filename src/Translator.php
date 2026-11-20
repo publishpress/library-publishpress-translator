@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
 use PublishPress\Translations\Support\AiFormatStringFixer;
+use PublishPress\Translations\Support\AiModel;
 use PublishPress\Translations\Support\IdenticalTranslationPolicy;
 use PublishPress\Translations\Support\PoFormatRepair;
 use PublishPress\Translations\Support\TranslationOverrides;
@@ -125,7 +126,6 @@ class Translator
     /**
      * Default Potomatic AI settings
      */
-    private const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
     private const DEFAULT_AI_BATCH_SIZE = 40;
     private const DEFAULT_AI_JOBS = 8;
     private const MIN_AI_BATCH_SIZE = 1;
@@ -141,7 +141,8 @@ class Translator
      * @var array
      */
     private $potomaticSettings = [
-        'model' => self::DEFAULT_AI_MODEL,
+        'model' => AiModel::NAME,
+        'reasoning_effort' => AiModel::REASONING_EFFORT,
         'batch_size' => self::DEFAULT_AI_BATCH_SIZE,
         'jobs' => self::DEFAULT_AI_JOBS,
         'max_cost' => self::DEFAULT_AI_MAX_COST,
@@ -215,6 +216,7 @@ class Translator
 
         $this->auditOptions = AuditOptions::defaults();
         $this->applyPotomaticConcurrencyFromEnv();
+        $this->applyReasoningEffortFromEnv();
 
         $envExcludePaths = getenv('AUDIT_SOURCE_EXCLUDE_PATHS');
         if ($envExcludePaths !== false && $envExcludePaths !== '') {
@@ -249,6 +251,28 @@ class Translator
                 self::MAX_AI_BATCH_SIZE
             );
         }
+    }
+
+    /**
+     * Apply REASONING_EFFORT when set. The default is low for gpt-6-luna.
+     *
+     * @throws InvalidArgumentException
+     */
+    private function applyReasoningEffortFromEnv()
+    {
+        $effort = getenv('REASONING_EFFORT');
+        if ($effort === false || $effort === '') {
+            return;
+        }
+
+        $allowed = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+        if (!in_array($effort, $allowed, true)) {
+            throw new InvalidArgumentException(
+                'REASONING_EFFORT must be one of: ' . implode(', ', $allowed) . '.'
+            );
+        }
+
+        $this->potomaticSettings['reasoning_effort'] = $effort;
     }
 
     /**
@@ -2279,11 +2303,7 @@ class Translator
         $cmd .= ' --output-dir ' . escapeshellarg($this->languagesDir);
         $cmd .= ' --po-file-prefix ' . escapeshellarg($textDomain . '-');
         $cmd .= ' --model ' . escapeshellarg($this->potomaticSettings['model']);
-
-        $reasoningEffort = getenv('REASONING_EFFORT');
-        if (is_string($reasoningEffort) && $reasoningEffort !== '') {
-            $cmd .= ' --reasoning-effort ' . escapeshellarg($reasoningEffort);
-        }
+        $cmd .= ' --reasoning-effort ' . escapeshellarg($this->potomaticSettings['reasoning_effort']);
         $cmd .= ' --batch-size ' . (int) $this->potomaticSettings['batch_size'];
         $cmd .= ' --jobs ' . (int) $this->potomaticSettings['jobs'];
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
@@ -3035,6 +3055,8 @@ class Translator
             $this->output->bullet('Skipped languages: ' . implode(', ', $this->skippedLanguages) . ' (human translators)');
         }
         $this->output->bullet('Mode: ' . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION'));
+        $this->output->bullet('Model: ' . $this->potomaticSettings['model']);
+        $this->output->bullet('Reasoning effort: ' . $this->potomaticSettings['reasoning_effort']);
         $this->output->bullet('Parallel languages: ' . (int) $this->potomaticSettings['jobs']);
         $this->output->bullet('Strings per request: ' . (int) $this->potomaticSettings['batch_size']);
         $this->output->bullet('Weblate: ' . ($this->weblateEnabled ? 'enabled' : 'disabled'));

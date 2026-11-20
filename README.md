@@ -235,6 +235,16 @@ The following environment variables control advanced behaviour:
   export WEBLATE_CLEAN_EXISTING_TRANSLATIONS=true
   ```
 
+- **Model** (default: `gpt-6-luna`, reasoning effort `low`)
+  Potomatic translates with `gpt-6-luna`. The request uses reasoning effort `low`. `gpt-6-luna` rejects `minimal`.
+
+- **`REASONING_EFFORT`** (optional, default: `low`)
+  Override the reasoning effort. Allowed values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.
+
+  ```bash
+  export REASONING_EFFORT=none
+  ```
+
 - **`AI_JOBS`** (optional, default: `8`)
   How many target languages Potomatic translates at once. Range `1`–`10` (Potomatic’s cap). The default language list has 38 locales, so `8` finishes a full run in about five waves instead of nineteen.
 
@@ -374,7 +384,7 @@ Potomatic can add a `%s`, drop a `%1$s`, mix both styles in one string, or write
 vendor/bin/publishpress-translate --repair-placeholders
 ```
 
-A count or type mismatch is sent to OpenAI with `OPENAI_API_KEY`. The model must return the same sentence in the target language with the source placeholders. A reply that still has the wrong placeholders is discarded. The repair stops at the same $5 OpenAI cap as Potomatic (`max_cost`). One budget covers every language file in the run. Spacing and quote-escape fixes stay local. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
+A count or type mismatch is sent to OpenAI with `OPENAI_API_KEY`. The repair uses `gpt-6-luna` with reasoning effort `low`. The model must return the same sentence in the target language with the source placeholders. A reply that still has the wrong placeholders is discarded. The repair stops at the same $5 OpenAI cap as Potomatic (`max_cost`). One budget covers every language file in the run. Spacing and quote-escape fixes stay local. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 
