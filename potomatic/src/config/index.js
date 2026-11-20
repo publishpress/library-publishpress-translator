@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { z } from 'zod';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { DEFAULT_MODEL, REASONING_EFFORTS } from '../providers/openai/modelCapabilities.js';
 import { dirname, join } from 'path';
 import { normalizeLanguageInput } from '../utils/languageMapping.js';
 
@@ -49,28 +50,35 @@ const envSchema = z.object({
 	// Provider settings.
 	PROVIDER: z.string().default('openai'),
 
-	// Provider API key.
+	// API keys - 5-tier resolution: Potomatic-specific > standard provider > generic > fallback.
+	POTOMATIC_API_KEY: z.string().optional(),
+	POTOMATIC_OPENAI_API_KEY: z.string().optional(),
+	POTOMATIC_GEMINI_API_KEY: z.string().optional(),
+	OPENAI_API_KEY: z.string().optional(),
+	GEMINI_API_KEY: z.string().optional(),
 	API_KEY: z.string().optional(),
 
 	// Model settings.
-	MODEL: z.string().default('gpt-4o-mini'),
+	MODEL: z.string().default(DEFAULT_MODEL),
+	ALLOW_UNKNOWN_MODEL: booleanStringSchema(false),
 
 	// Performance settings.
 	BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
 	CONCURRENT_JOBS: z.coerce.number().int().min(1).max(10).default(2),
 	TEMPERATURE: z.coerce.number().min(0).max(2).default(0.7),
+	REASONING_EFFORT: z.preprocess((value) => (value === '' || value === undefined ? undefined : value), z.enum(REASONING_EFFORTS).optional()),
 	TIMEOUT: z.coerce.number().int().min(10).max(300).default(60),
 	MAX_TOKENS: z.coerce.number().int().min(1).max(32768).optional(),
 
 	// Retry settings.
 	MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
 	RETRY_DELAY: z.coerce.number().int().min(500).max(30000).default(2000),
-	ABORT_ON_FAILURE: z.coerce.boolean().default(false),
-	SKIP_LANGUAGE_ON_FAILURE: z.coerce.boolean().default(false),
+	ABORT_ON_FAILURE: booleanStringSchema(false),
+	SKIP_LANGUAGE_ON_FAILURE: booleanStringSchema(false),
 
 	// Testing settings.
 	TEST_RETRY_FAILURE_RATE: z.coerce.number().min(0).max(1).optional(),
-	TEST_ALLOW_COMPLETE_FAILURE: z.coerce.boolean().default(false),
+	TEST_ALLOW_COMPLETE_FAILURE: booleanStringSchema(false),
 
 	// Limits.
 	MAX_COST: z.coerce.number().min(0.001).optional(),
@@ -84,7 +92,11 @@ const envSchema = z.object({
 
 	// Dictionary settings.
 	DICTIONARY_PATH: z.string().default('./config/dictionaries'),
-	USE_DICTIONARY: z.coerce.boolean().default(false),
+	USE_DICTIONARY: booleanStringSchema(false),
+
+	// Configuration file paths.
+	PROMPT_FILE_PATH: z.string().optional(),
+	PO_HEADER_TEMPLATE_PATH: z.string().optional(),
 
 	// Optional target languages and pot file (can set defaults.).
 	TARGET_LANGUAGES: z.string().optional(),
@@ -100,10 +112,10 @@ const envSchema = z.object({
 
 	// Debug and behavior.
 	VERBOSE_LEVEL: z.coerce.number().int().min(0).max(3).default(1),
-	SAVE_DEBUG_INFO: z.coerce.boolean().default(false),
-	DRY_RUN: z.coerce.boolean().default(false),
-	FORCE_TRANSLATE: z.coerce.boolean().default(false),
-	RICH_PROGRESS: z.coerce.boolean().default(false),
+	SAVE_DEBUG_INFO: booleanStringSchema(false),
+	DRY_RUN: booleanStringSchema(false),
+	FORCE_TRANSLATE: booleanStringSchema(false),
+	RICH_PROGRESS: booleanStringSchema(false),
 });
 
 /**
@@ -131,8 +143,63 @@ function parseEnvironmentConfig() {
 	}
 }
 
+/**
+ * Creates a Zod schema for parsing boolean values from strings (env vars and CLI args).
+ * Handles common string representations: "true", "false", "1", "0".
+ *
+ * @since 1.1.0
+ *
+ * @param {boolean} defaultValue - Default value if not provided or empty.
+ *
+ * @return {z.ZodEffects} Zod schema that parses boolean strings.
+ */
+function booleanStringSchema(defaultValue = false) {
+	return z
+		.string()
+		.transform((s) => s.trim().toLowerCase())
+		.pipe(z.enum(['true', 'false', '1', '0', '']))
+		.default(defaultValue ? 'true' : 'false')
+		.transform((val) => val === 'true' || val === '1');
+}
+
+/**
+ * Auto-detects provider from environment variable keys.
+ * Checks for POTOMATIC_<PROVIDER>_API_KEY and <PROVIDER>_API_KEY patterns.
+ *
+ * @since 1.1.0
+ *
+ * @return {string|null} Detected provider name (lowercase) or null if none detected.
+ */
+function detectProviderFromEnv() {
+	const knownProviders = ['gemini', 'anthropic', 'cohere', 'openai'];
+
+	// Check POTOMATIC_<PROVIDER>_API_KEY first (higher priority).
+	for (const provider of knownProviders) {
+		const providerUpper = provider.toUpperCase();
+
+		if (process.env[`POTOMATIC_${providerUpper}_API_KEY`]) {
+			return provider;
+		}
+	}
+
+	// Check <PROVIDER>_API_KEY (standard keys).
+	for (const provider of knownProviders) {
+		const providerUpper = provider.toUpperCase();
+
+		if (process.env[`${providerUpper}_API_KEY`]) {
+			return provider;
+		}
+	}
+
+	return null;
+}
+
 // Parse environment configuration once at module load.
 const ENV_CONFIG = parseEnvironmentConfig();
+
+// Auto-detect provider from environment keys if not explicitly set.
+const DETECTED_PROVIDER = detectProviderFromEnv();
+const RESOLVED_PROVIDER = ENV_CONFIG.PROVIDER || DETECTED_PROVIDER || 'openai';
 
 /**
  * Default configuration constants.
@@ -140,9 +207,10 @@ const ENV_CONFIG = parseEnvironmentConfig();
  * @since 1.0.0
  */
 export const DEFAULTS = {
-	PROVIDER: ENV_CONFIG.PROVIDER,
+	PROVIDER: RESOLVED_PROVIDER,
 	BATCH_SIZE: ENV_CONFIG.BATCH_SIZE,
 	MODEL: ENV_CONFIG.MODEL,
+	ALLOW_UNKNOWN_MODEL: ENV_CONFIG.ALLOW_UNKNOWN_MODEL,
 	VERBOSE_LEVEL: ENV_CONFIG.VERBOSE_LEVEL,
 	PO_FILE_PREFIX: ENV_CONFIG.PO_FILE_PREFIX,
 	INPUT_PO_PATH: ENV_CONFIG.INPUT_PO_PATH,
@@ -152,6 +220,7 @@ export const DEFAULTS = {
 	ABORT_ON_FAILURE: ENV_CONFIG.ABORT_ON_FAILURE,
 	SKIP_LANGUAGE_ON_FAILURE: ENV_CONFIG.SKIP_LANGUAGE_ON_FAILURE,
 	TEMPERATURE: ENV_CONFIG.TEMPERATURE,
+	REASONING_EFFORT: ENV_CONFIG.REASONING_EFFORT,
 	TIMEOUT: ENV_CONFIG.TIMEOUT,
 	MAX_TOKENS: ENV_CONFIG.MAX_TOKENS,
 	MAX_COST: ENV_CONFIG.MAX_COST,
@@ -172,6 +241,8 @@ export const DEFAULTS = {
 	LOCALE_FORMAT: ENV_CONFIG.LOCALE_FORMAT,
 	DICTIONARY_PATH: ENV_CONFIG.DICTIONARY_PATH,
 	USE_DICTIONARY: ENV_CONFIG.USE_DICTIONARY,
+	PROMPT_FILE_PATH: ENV_CONFIG.PROMPT_FILE_PATH,
+	PO_HEADER_TEMPLATE_PATH: ENV_CONFIG.PO_HEADER_TEMPLATE_PATH,
 };
 
 /**
@@ -188,7 +259,7 @@ export function parseCliArguments() {
 
 	program
 		.version(packageJson.version)
-		// === Required Options (can be set via env vars) ==.=
+		// === Required Options (can be set via env vars) ===
 		.option(
 			'-l, --target-languages <languages>',
 			'Target locale codes, comma-separated (e.g., fr_FR, es_ES, de_DE)',
@@ -208,25 +279,39 @@ export function parseCliArguments() {
 		.option('-p, --pot-file-path <path>', 'Path to the input `.pot` file containing source strings', DEFAULTS.POT_FILE_PATH)
 		.option('-s, --source-language <lang>', 'Source language code (default: "en")', DEFAULTS.SOURCE_LANGUAGE)
 
-		// === Output Options ==.=
+		// === Output Options ===
 		.option('-o, --output-dir <path>', 'Directory to save generated `.po` files for each language', DEFAULTS.OUTPUT_DIR)
 		.option('--output-format <format>', 'Output format: `console` or `json` (default: console)', DEFAULTS.OUTPUT_FORMAT)
 		.option('--output-file <path>', 'Path to save JSON output (use stdout if not provided)', DEFAULTS.OUTPUT_FILE)
 		.option('--po-file-prefix <prefix>', 'Prefix for each output `.po` file (e.g., "app-" → "app-fr_FR.po")', DEFAULTS.PO_FILE_PREFIX)
 		.option('--locale-format <format>', 'Format to use for locale codes in file names: `wp_locale` (ru_RU), `iso_639_1` (ru), `iso_639_2` (rus), or `target_lang` (default)', DEFAULTS.LOCALE_FORMAT)
 
-		// === Translation Options ==.=
-		.option('-k, --api-key <key>', 'OpenAI API key (overrides API_KEY env var)')
-		.option('-m, --model <model>', 'AI model name (e.g., "gpt-4o-mini")', DEFAULTS.MODEL)
+		// === Translation Options ===
+		.addOption(new Option('--provider <provider>', 'AI provider.').default(DEFAULTS.PROVIDER).hideHelp())
+		.option('-k, --api-key <key>', 'OpenAI API key (overrides POTOMATIC_OPENAI_API_KEY, OPENAI_API_KEY and POTOMATIC_API_KEY env vars)')
+		.option('-m, --model <model>', 'AI model name (e.g., "gpt-5.4-mini")', DEFAULTS.MODEL)
+		.option('--allow-unknown-model', 'Accept a model that is not in the pricing catalogue, costed at the fallback rate', DEFAULTS.ALLOW_UNKNOWN_MODEL)
 		.option('--temperature <number>', 'Creativity level (0.0-2.0); lower = more deterministic, higher = more creative', (val) => Math.max(0, Math.min(2, parseFloat(val))), DEFAULTS.TEMPERATURE)
+		.option('--reasoning-effort <level>', `Reasoning effort (${REASONING_EFFORTS.join(', ')}). Omit to keep the model default. none sends temperature and skips reasoning headroom.`, (val) => {
+			if (!REASONING_EFFORTS.includes(val)) {
+				throw new Error(`Reasoning effort must be one of: ${REASONING_EFFORTS.join(', ')}`);
+			}
+
+			return val;
+		}, DEFAULTS.REASONING_EFFORT)
 		.option('-F, --force-translate', 'Re-translate all strings, ignoring any existing translations', DEFAULTS.FORCE_TRANSLATE)
 		.option('--input-po-path <path>', 'Path to an existing `.po` file to use as a base for merging', DEFAULTS.INPUT_PO_PATH)
 
-		// === Dictionary Options ==.=
+		// === Dictionary Options ===
 		.option('--dictionary-path <path>', 'Directory containing translation dictionaries (default: ./config/dictionaries)', DEFAULTS.DICTIONARY_PATH)
 		.option('--use-dictionary', 'Use user dictionary for consistent term translation', DEFAULTS.USE_DICTIONARY)
 
-		// === Performance Options ==.=
+		// === Configuration File Paths ===
+		.option('--prompt-file-path <path>', 'Path to the prompt.md file containing translation instructions (default: ./config/prompt.md)', DEFAULTS.PROMPT_FILE_PATH)
+		.option('--extra-prompt-path <path>', 'Path to an additional prompt file appended to the default prompt (e.g., domain-specific terminology)')
+		.option('--po-header-template-path <path>', 'Path to the po-header.json file containing custom PO file headers (default: ./config/po-header.json)', DEFAULTS.PO_HEADER_TEMPLATE_PATH)
+
+		// === Performance Options ===
 		.option('-b, --batch-size <number>', 'Number of strings per translation batch (1-100). Larger batches reduce cost but increase risk of API failures.', (val) => Math.max(1, Math.min(100, parseInt(val, 10))), DEFAULTS.BATCH_SIZE)
 		.option('-j, --jobs <number>', 'Maximum number of languages to translate in parallel (1-10)', (val) => Math.max(1, Math.min(10, parseInt(val, 10))), DEFAULTS.CONCURRENT_JOBS)
 		.option('--max-tokens <number>', 'Maximum completion tokens for AI responses (1-32768, auto-calculated if not set)', (val) => Math.max(1, Math.min(32768, parseInt(val, 10))), DEFAULTS.MAX_TOKENS)
@@ -234,14 +319,14 @@ export function parseCliArguments() {
 		.option('--max-total-strings <number>', 'Limit total number of strings translated across all languages (processed sequentially)', (val) => Math.max(1, parseInt(val, 10)), DEFAULTS.MAX_TOTAL_STRINGS)
 		.option('--max-cost <number>', 'Limit total estimated translation cost in USD', (val) => parseFloat(val), DEFAULTS.MAX_COST)
 
-		// === Reliability Options ==.=
+		// === Reliability Options ===
 		.option('--max-retries <number>', 'Number of retry attempts per batch (0-10)', (val) => Math.max(0, Math.min(10, parseInt(val, 10))), DEFAULTS.MAX_RETRIES)
 		.option('--retry-delay <number>', 'Delay between retry attempts in milliseconds (500-30000)', (val) => Math.max(500, Math.min(30000, parseInt(val, 10))), DEFAULTS.RETRY_DELAY)
 		.option('--abort-on-failure', 'Abort the entire translation run if any batch fails all retry attempts', DEFAULTS.ABORT_ON_FAILURE)
 		.option('--skip-language-on-failure', 'Skip current language on failure and continue with remaining languages', DEFAULTS.SKIP_LANGUAGE_ON_FAILURE)
 		.option('--timeout <number>', 'Timeout for API requests in seconds (10-300)', (val) => Math.max(10, Math.min(300, parseInt(val, 10))), DEFAULTS.TIMEOUT)
 
-		// === Debugging Options ==.=
+		// === Debugging Options ===
 		.addOption(
 			new Option('-v, --verbose-level <level>', 'Verbosity level: 0=errors, 1=normal, 2=verbose, 3=debug').default(DEFAULTS.VERBOSE_LEVEL.toString()).argParser((value) => {
 				const parsed = parseInt(value, 10);
@@ -260,8 +345,14 @@ export function parseCliArguments() {
 	if (shouldShowHelp) {
 		displayBanner();
 
+		const provider = ENV_CONFIG.PROVIDER;
+		const providerUpper = provider.toUpperCase();
+		const potomacProviderKey = ENV_CONFIG[`POTOMATIC_${providerUpper}_API_KEY`];
+		const standardProviderKey = ENV_CONFIG[`${providerUpper}_API_KEY`];
+
 		const tempOptions = {
-			apiKey: ENV_CONFIG.API_KEY,
+			provider,
+			apiKey: potomacProviderKey || standardProviderKey || ENV_CONFIG.POTOMATIC_API_KEY || ENV_CONFIG.API_KEY,
 			targetLanguages: DEFAULTS.TARGET_LANGUAGES ? DEFAULTS.TARGET_LANGUAGES.split(',').map((lang) => lang.trim()) : [],
 			potFilePath: DEFAULTS.POT_FILE_PATH,
 			dryRun: false,
@@ -301,8 +392,16 @@ export function parseCliArguments() {
 export function validateConfiguration(options) {
 	const errors = [];
 
-	if (!options.dryRun && !options.apiKey && !process.env.API_KEY) {
-		errors.push('🔑 API key required (set API_KEY env var, use --api-key, or try --dry-run)');
+	// Check for API key with provider-aware messaging (5-tier resolution).
+	const provider = options.provider || DEFAULTS.PROVIDER;
+	const providerUpper = provider.toUpperCase();
+	const potomacProviderKey = process.env[`POTOMATIC_${providerUpper}_API_KEY`];
+	const standardProviderKey = process.env[`${providerUpper}_API_KEY`];
+	const hasApiKey = options.apiKey || potomacProviderKey || standardProviderKey || process.env.POTOMATIC_API_KEY || process.env.API_KEY;
+
+	if (!options.dryRun && !hasApiKey) {
+		const providerName = provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : provider;
+		errors.push(`🔑 ${providerName} API key required. Set --api-key, ${providerUpper}_API_KEY, or POTOMATIC_API_KEY.`);
 	}
 
 	if (!options.targetLanguages || options.targetLanguages.length === 0) {
@@ -338,10 +437,19 @@ export function validateConfiguration(options) {
  * @return {Object} Complete configuration object ready for use.
  */
 export function createConfiguration(options) {
+	// 5-tier API key resolution chain.
+	const provider = options.provider || DEFAULTS.PROVIDER;
+	const providerUpper = provider.toUpperCase();
+	const potomacProviderKey = ENV_CONFIG[`POTOMATIC_${providerUpper}_API_KEY`];
+	const standardProviderKey = ENV_CONFIG[`${providerUpper}_API_KEY`];
+
+	const apiKey = options.apiKey || potomacProviderKey || standardProviderKey || ENV_CONFIG.POTOMATIC_API_KEY || ENV_CONFIG.API_KEY;
+
 	return {
-		provider: options.provider || DEFAULTS.PROVIDER,
-		apiKey: options.apiKey || ENV_CONFIG.API_KEY,
+		provider,
+		apiKey,
 		model: options.model || DEFAULTS.MODEL,
+		allowUnknownModel: options.allowUnknownModel || DEFAULTS.ALLOW_UNKNOWN_MODEL,
 
 		potFilePath: options.potFilePath || DEFAULTS.POT_FILE_PATH,
 		targetLanguages: (options.targetLanguages || []).map((lang) => normalizeLanguageInput(lang)),
@@ -351,7 +459,8 @@ export function createConfiguration(options) {
 
 		batchSize: options.batchSize || DEFAULTS.BATCH_SIZE,
 		concurrentJobs: options.jobs || DEFAULTS.CONCURRENT_JOBS,
-		temperature: options.temperature || DEFAULTS.TEMPERATURE,
+		temperature: options.temperature ?? DEFAULTS.TEMPERATURE,
+		reasoningEffort: options.reasoningEffort || DEFAULTS.REASONING_EFFORT,
 		timeout: options.timeout || DEFAULTS.TIMEOUT,
 		maxTokens: options.maxTokens || DEFAULTS.MAX_TOKENS,
 
@@ -376,5 +485,8 @@ export function createConfiguration(options) {
 		localeFormat: options.localeFormat || DEFAULTS.LOCALE_FORMAT,
 		dictionaryPath: options.dictionaryPath || DEFAULTS.DICTIONARY_PATH,
 		useDictionary: options.useDictionary || DEFAULTS.USE_DICTIONARY,
+		promptFilePath: options.promptFilePath || DEFAULTS.PROMPT_FILE_PATH,
+		extraPromptPath: options.extraPromptPath || null,
+		poHeaderTemplatePath: options.poHeaderTemplatePath || DEFAULTS.PO_HEADER_TEMPLATE_PATH,
 	};
 }

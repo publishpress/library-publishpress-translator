@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { encoding_for_model as encodingForModel } from 'tiktoken';
+import { DEFAULT_MODEL, getEncodingForModel } from '../providers/openai/modelCapabilities.js';
 import { getApiTargetLanguage } from './languageMapping.js';
 import { getPluralForms, extractPluralCount } from './poFileUtils.js';
 
@@ -48,14 +48,30 @@ function loadPromptTemplate(promptFilePath) {
  *
  * @return {string} Complete system prompt ready for use.
  */
-export function buildSystemPrompt(targetLang, sourceLang = 'English', promptFilePath = null) {
-	if (!promptFilePath) {
-		const currentDir = path.dirname(fileURLToPath(import.meta.url));
+export function buildSystemPrompt(targetLang, sourceLang = 'English', promptFilePath = null, extraPromptPath = null) {
+	const currentDir = path.dirname(fileURLToPath(import.meta.url));
+	const defaultPromptPath = path.resolve(currentDir, '../../config/prompt.md');
 
-		promptFilePath = path.resolve(currentDir, '../../config/prompt.md');
+	// --prompt-file-path fully overrides the default prompt.
+	// --extra-prompt-path appends to the default prompt (for domain-specific terminology).
+	let template;
+
+	if (promptFilePath) {
+		template = loadPromptTemplate(promptFilePath);
+	} else {
+		template = loadPromptTemplate(defaultPromptPath);
 	}
 
-	const template = loadPromptTemplate(promptFilePath);
+	if (extraPromptPath) {
+		if (!fs.existsSync(extraPromptPath)) {
+			throw new Error(`Extra prompt file not found: ${extraPromptPath}`);
+		}
+
+		const extraTemplate = loadPromptTemplate(extraPromptPath);
+
+		template = template + '\n\n' + extraTemplate;
+	}
+
 	const targetLanguageName = getApiTargetLanguage(targetLang);
 	const sourceLanguageName = getApiTargetLanguage(sourceLang);
 	const pluralFormsString = getPluralForms(targetLang, { debug: () => {}, warn: () => {} });
@@ -74,23 +90,23 @@ export function buildSystemPrompt(targetLang, sourceLang = 'English', promptFile
  * @since 1.0.0
  *
  * @param {string} prompt - The prompt text.
- * @param {string} model  - The model to get encoding for (default: 'gpt-3.5-turbo').
+ * @param {string} model  - The model to get encoding for (defaults to the configured default model).
  *
  * @return {number} Exact token count.
  */
-export function getPromptTokenCount(prompt, model = 'gpt-3.5-turbo') {
+export function getPromptTokenCount(prompt, model = DEFAULT_MODEL) {
 	if (!prompt || typeof prompt !== 'string') {
 		return 0;
 	}
 
+	const encoding = getEncodingForModel(model);
+
+	if (!encoding) {
+		return Math.ceil(prompt.length / 4);
+	}
+
 	try {
-		const encoding = encodingForModel(model);
-		const tokens = encoding.encode(prompt);
-		const tokenCount = tokens.length;
-
-		encoding.free();
-
-		return tokenCount;
+		return encoding.encode(prompt).length;
 	} catch (error) {
 		console.warn(`Failed to get exact token count: ${error.message}`);
 

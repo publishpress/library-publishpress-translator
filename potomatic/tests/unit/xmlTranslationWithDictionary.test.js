@@ -18,8 +18,8 @@ describe('XML Translation with Dictionary', () => {
 			const result = buildXmlPrompt(batch, 'fr_FR', 1);
 
 			expect(result.xmlPrompt).toContain('Translate to French');
-			expect(result.xmlPrompt).toContain('<source i="1">Hello</source>');
-			expect(result.xmlPrompt).toContain('<source i="2">Goodbye</source>');
+			expect(result.xmlPrompt).toContain('<source i="1" placeholders="none">Hello</source>');
+			expect(result.xmlPrompt).toContain('<source i="2" placeholders="none">Goodbye</source>');
 			expect(result.dictionaryCount).toBe(0);
 			expect(result.metadata.hasDictionary).toBe(false);
 		});
@@ -36,13 +36,13 @@ describe('XML Translation with Dictionary', () => {
 
 			// Should contain dictionary section
 			expect(result.xmlPrompt).toContain('<!-- Dictionary Examples for Consistency -->');
-			expect(result.xmlPrompt).toContain('<source i="1">Hello</source>');
-			expect(result.xmlPrompt).toContain('<source i="2">Save</source>');
+			expect(result.xmlPrompt).toContain('<source i="1" placeholders="none">Hello</source>');
+			expect(result.xmlPrompt).toContain('<source i="2" placeholders="none">Save</source>');
 			expect(result.xmlPrompt).toContain('<!-- End Dictionary Examples -->');
 
 			// Should contain actual strings starting after dictionary
-			expect(result.xmlPrompt).toContain('<source i="3">Hello World</source>');
-			expect(result.xmlPrompt).toContain('<source i="4">Save changes</source>');
+			expect(result.xmlPrompt).toContain('<source i="3" placeholders="none">Hello World</source>');
+			expect(result.xmlPrompt).toContain('<source i="4" placeholders="none">Save changes</source>');
 
 			expect(result.dictionaryCount).toBe(2);
 			expect(result.metadata.hasDictionary).toBe(true);
@@ -56,9 +56,10 @@ describe('XML Translation with Dictionary', () => {
 
 			const result = buildXmlPrompt(batch, 'fr_FR', 2, dictionaryMatches);
 
-			expect(result.xmlPrompt).toContain('<source i="1">item</source>');
-			expect(result.xmlPrompt).toContain('<source i="2">One item|%d items</source>');
-			expect(result.xmlPrompt).toContain('Items with "|" need 2 forms');
+			expect(result.xmlPrompt).toContain('<source i="1" placeholders="none">item</source>');
+			expect(result.xmlPrompt).toContain('<singular>One item</singular>');
+			expect(result.xmlPrompt).toContain('<plural>%d items</plural>');
+			expect(result.xmlPrompt).toContain('For entries with <singular> and <plural> tags, provide 2 plural forms');
 		});
 
 		it('should escape XML in dictionary terms', () => {
@@ -112,7 +113,7 @@ describe('XML Translation with Dictionary', () => {
 
 			const result = parseXmlResponse(xmlResponse, batch, 1, mockLogger, 0);
 
-			expect(result).toEqual([
+			expect(result.translations).toEqual([
 				{ msgid: 'Hello', msgstr: ['Bonjour'] },
 				{ msgid: 'Goodbye', msgstr: ['Au revoir'] },
 			]);
@@ -132,7 +133,7 @@ describe('XML Translation with Dictionary', () => {
 			const result = parseXmlResponse(xmlResponse, batch, 1, mockLogger, 2);
 
 			// Should only use indices 3-4 for actual translations
-			expect(result).toEqual([
+			expect(result.translations).toEqual([
 				{ msgid: 'Hello World', msgstr: ['Bonjour le monde'] },
 				{ msgid: 'Save changes', msgstr: ['Enregistrer les modifications'] },
 			]);
@@ -148,7 +149,7 @@ describe('XML Translation with Dictionary', () => {
 
 			const result = parseXmlResponse(xmlResponse, batch, 2, mockLogger, 1);
 
-			expect(result).toEqual([{ msgid: 'One item', msgstr: ['Un élément', '%d éléments'] }]);
+			expect(result.translations).toEqual([{ msgid: 'One item', msgstr: ['Un élément', '%d éléments'] }]);
 		});
 
 		it('should handle missing dictionary responses gracefully', () => {
@@ -159,7 +160,7 @@ describe('XML Translation with Dictionary', () => {
 
 			const result = parseXmlResponse(xmlResponse, batch, 1, mockLogger, 1);
 
-			expect(result).toEqual([{ msgid: 'Hello', msgstr: ['Bonjour'] }]);
+			expect(result.translations).toEqual([{ msgid: 'Hello', msgstr: ['Bonjour'] }]);
 		});
 
 		it('should handle mixed response with some missing translations', () => {
@@ -174,7 +175,7 @@ describe('XML Translation with Dictionary', () => {
 
 			const result = parseXmlResponse(xmlResponse, batch, 1, mockLogger, 1);
 
-			expect(result).toEqual([
+			expect(result.translations).toEqual([
 				{ msgid: 'First', msgstr: ['Premier message'] },
 				{ msgid: 'Second', msgstr: [''] }, // Missing
 				{ msgid: 'Third', msgstr: ['Troisième message'] },
@@ -198,7 +199,7 @@ describe('XML Translation with Dictionary', () => {
 
 			expect(warnings).toHaveLength(1);
 			expect(warnings[0]).toContain('Invalid batch index');
-			expect(result).toEqual([{ msgid: 'Test', msgstr: [''] }]);
+			expect(result.translations).toEqual([{ msgid: 'Test', msgstr: [''] }]);
 		});
 	});
 
@@ -215,8 +216,8 @@ describe('XML Translation with Dictionary', () => {
 			const promptResult = buildXmlPrompt(batch, 'fr_FR', 1, dictionaryMatches);
 
 			expect(promptResult.dictionaryCount).toBe(2);
-			expect(promptResult.xmlPrompt).toContain('<source i="1">Login</source>');
-			expect(promptResult.xmlPrompt).toContain('<source i="3">Login to dashboard</source>');
+			expect(promptResult.xmlPrompt).toContain('<source i="1" placeholders="none">Login</source>');
+			expect(promptResult.xmlPrompt).toContain('<source i="3" placeholders="none">Login to dashboard</source>');
 
 			// 2. Build expected dictionary response
 			const dictResponse = buildDictionaryResponse(dictionaryMatches);
@@ -232,7 +233,7 @@ describe('XML Translation with Dictionary', () => {
 
 			const parsed = parseXmlResponse(aiResponse, batch, 1, mockLogger, 2);
 
-			expect(parsed).toEqual([
+			expect(parsed.translations).toEqual([
 				{ msgid: 'Login to dashboard', msgstr: ['Se connecter au tableau de bord'] },
 				{ msgid: 'User settings panel', msgstr: ['Panneau des paramètres utilisateur'] },
 			]);

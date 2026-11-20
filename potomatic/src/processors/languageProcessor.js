@@ -8,6 +8,7 @@ import { formatCost, formatNumber, formatDuration } from '../utils/costCalculati
 import { getFileNamingLocale, normalizeLanguageInput, getLanguageName } from '../utils/languageMapping.js';
 import { buildXmlPrompt, buildDictionaryResponse } from '../utils/xmlTranslation.js';
 import { loadDictionary, findDictionaryMatches } from '../utils/dictionaryUtils.js';
+import { createEmptyValidationStats, accumulateValidationStats, getTotalValidationIssues, formatValidationBreakdown } from '../utils/validationStats.js';
 
 // Cost threshold for determining when to show budget-related skip messages.
 // When cost reaches 80% of remaining budget, we show explanatory messages.
@@ -99,7 +100,7 @@ export class LanguageProcessor {
 				return stats;
 			}
 
-			const { successCount, failedCount, skippedDueToBudget } = await this._processBatches(batches, outputPoData, language, outputFile, progressCallback);
+			const { successCount, failedCount, skippedDueToBudget, validationStats } = await this._processBatches(batches, outputPoData, language, outputFile, progressCallback);
 
 			stats.translatedInRun = successCount;
 			stats.failedInRun = failedCount;
@@ -108,6 +109,7 @@ export class LanguageProcessor {
 			this.logger.success(`All batches for ${language} processed successfully.`);
 
 			stats.costData = this.costAccumulator.getTotals();
+			stats.validationStats = validationStats;
 
 			return stats;
 		} catch (error) {
@@ -143,6 +145,7 @@ export class LanguageProcessor {
 			outputFile: null,
 			costData: null,
 			error: null,
+			validationStats: createEmptyValidationStats(),
 		};
 	}
 
@@ -377,6 +380,9 @@ export class LanguageProcessor {
 		let processedStringsCount = 0;
 		let previousBatchDuration = null;
 
+		// Accumulate validation stats across all batches.
+		const accumulatedValidationStats = createEmptyValidationStats();
+
 		for (let i = 0; i < batches.length; i++) {
 			const batch = batches[i];
 			const batchNumber = i + 1;
@@ -444,6 +450,16 @@ export class LanguageProcessor {
 							break;
 						}
 					}
+
+					// Accumulate validation stats from this batch.
+					if (batchResult.validationStats) {
+						accumulateValidationStats(accumulatedValidationStats, batchResult.validationStats);
+
+						// Debug: log validation stats.
+						this.logger.debug(`Batch ${batchNumber} validation stats:`, JSON.stringify(batchResult.validationStats));
+					} else {
+						this.logger.debug(`Batch ${batchNumber} has no validationStats`);
+					}
 				}
 
 				this._updatePoDataWithBatch(outputPoData, translatedBatchItems);
@@ -475,11 +491,34 @@ export class LanguageProcessor {
 
 		this._logFinalSummary(language, successfullyTranslatedCount, batches, skippedDueToBudgetCount, outputFile);
 
+		// Display validation summary at verbosity level 2+ in detailed logs.
+		const totalValidationIssues = getTotalValidationIssues(accumulatedValidationStats);
+
+		this.logger.debug(`Total validation issues: ${totalValidationIssues}`, JSON.stringify(accumulatedValidationStats));
+		this.logger.debug(`Verbose level: ${this.config.verboseLevel || 1}`);
+
+		if (totalValidationIssues > 0) {
+			const breakdown = formatValidationBreakdown(accumulatedValidationStats);
+
+			this.logger.warn(`Validation: ${breakdown}`);
+
+			const blanked = accumulatedValidationStats.blankedStrings || [];
+
+			if (blanked.length > 0) {
+				this.logger.warn(`Blanked ${blanked.length} translation(s) due to placeholder mismatch:`);
+
+				for (const b of blanked) {
+					this.logger.warn(`  "${b.msgid}" [form ${b.form}]: expected [${b.expected}], got [${b.got}]`);
+				}
+			}
+		}
+
 		return {
 			successCount: successfullyTranslatedCount,
 			failedCount: actuallyFailedCount,
 			skippedDueToBudget: skippedDueToBudgetCount,
 			skippedDueToLimits: skippedDueToLimitsCount,
+			validationStats: accumulatedValidationStats,
 		};
 	}
 
@@ -583,7 +622,7 @@ export class LanguageProcessor {
 	async _processDryRunBatch(batch, batchNumber, totalBatches, language) {
 		this.logger.info(`[Batch ${batchNumber}/${totalBatches}] DRY RUN: Analyzing ${formatNumber(batch.length || 0)} strings for translation`);
 
-		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage);
+		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage, this.config.promptFilePath, this.config.extraPromptPath);
 		const costData = this._calculateDryRunCosts(batch, systemPrompt, language);
 
 		// Log dictionary usage if enabled.
@@ -865,7 +904,7 @@ export class LanguageProcessor {
 	 * @return {number} Estimated cost for the batch.
 	 */
 	_estimateBatchCost(batch, language) {
-		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage);
+		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage, this.config.promptFilePath, this.config.extraPromptPath);
 		const costData = this._calculateDryRunCosts(batch, systemPrompt, language);
 
 		return costData.estimatedCost;
@@ -1014,7 +1053,7 @@ export class LanguageProcessor {
 	 * @throws {Error} If file save operation fails.
 	 */
 	async _savePoFile(outputPoData, language, outputFile) {
-		const success = await compilePoFile(outputPoData, language, outputFile, this.logger, this.config.poHeaderTemplate);
+		const success = await compilePoFile(outputPoData, language, outputFile, this.logger, this.config.poHeaderTemplatePath);
 
 		if (!success) {
 			throw new Error(`Failed to save .po file: ${outputFile}`);
@@ -1040,7 +1079,7 @@ export class LanguageProcessor {
 	 * @return {Promise<Object>} Object containing batch result and translated items.
 	 */
 	async _processActualBatch(batch, language, batchNumber, totalBatches, progressCallback, processedStringsCount, totalStringsToTranslate, processStartTime) {
-		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage);
+		const systemPrompt = buildSystemPrompt(language, this.config.sourceLanguage, this.config.promptFilePath, this.config.extraPromptPath);
 
 		// Calculate plural count for target language.
 		const pluralFormsString = getPluralForms(language, this.logger);

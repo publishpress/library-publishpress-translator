@@ -2,6 +2,8 @@ import { BaseReporter } from './base/BaseReporter.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { createSummary, calculateAggregateTotals, formatNumber } from '../utils/costCalculations.js';
+import { VALIDATION_TYPES, getTotalValidationIssues } from '../utils/validationStats.js';
+import { DEFAULT_MODEL } from '../providers/openai/modelCapabilities.js';
 
 /**
  * Reports translation results in JSON format.
@@ -43,10 +45,10 @@ export class JsonReporter extends BaseReporter {
 				source_language: this.options.sourceLanguage || 'en',
 				dry_run: totals.isDryRun || false,
 				configuration: {
-					model: this.options.model || 'gpt-3.5-turbo',
+					model: this.options.model || DEFAULT_MODEL,
 					batch_size: this.options.batchSize || 20,
 					max_retries: this.options.maxRetries || 3,
-					temperature: this.options.temperature || 0.1,
+					temperature: this.options.temperature ?? 0.1,
 					provider: this.options.provider || 'openai',
 				},
 			},
@@ -74,6 +76,18 @@ export class JsonReporter extends BaseReporter {
 	 * @since 1.0.0
 	 */
 	_formatJobResult(stat) {
+		const validation = {};
+
+		for (const key of Object.keys(VALIDATION_TYPES)) {
+			// Convert camelCase to snake_case for JSON output.
+			const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+
+			validation[snakeKey] = stat.validationStats?.[key] || 0;
+		}
+
+		// Calculate total warnings count.
+		const totalWarnings = getTotalValidationIssues(stat.validationStats);
+
 		return {
 			language: stat.language,
 			status: stat.error ? 'error' : 'success',
@@ -85,6 +99,7 @@ export class JsonReporter extends BaseReporter {
 				skipped_due_to_limits: stat.skippedDueToLimits || 0,
 				failed: stat.failedInRun || 0,
 				merged: stat.mergedFromExisting || 0,
+				warnings: totalWarnings,
 			},
 			cost: {
 				amount: stat.costData?.totalCost || 0,
@@ -92,6 +107,7 @@ export class JsonReporter extends BaseReporter {
 				output_tokens: stat.costData?.totalCompletionTokens || stat.costData?.outputTokens || 0,
 				total_tokens: stat.costData?.totalTokens || 0,
 			},
+			validation,
 			output_file: stat.outputFile || `${stat.language}.po`,
 			method: stat.method || 'api_translation',
 			duration_ms: stat.duration || 0,

@@ -27,7 +27,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		};
 
 		const config = {
-			model: 'gpt-4o-mini',
+			model: 'gpt-4.1-mini',
 			temperature: 0.7,
 			useDictionary: true,
 			dictionaryPath: tempDictDir,
@@ -48,7 +48,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		const translations = ['Bonjour', 'Au revoir'];
 		mockClient.queueResponse(createSuccessResponse(translations));
 
-		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4o-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
+		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4.1-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
 
 		expect(result.success).toBe(true);
 		expect(result.translations).toHaveLength(2);
@@ -58,8 +58,8 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		// Verify request content
 		const lastRequest = mockClient.getLastRequest();
 		expect(lastRequest.messages).toHaveLength(2); // System + user only
-		expect(lastRequest.messages[1].content).toContain('<source i="1">Hello</source>');
-		expect(lastRequest.messages[1].content).toContain('<source i="2">Goodbye</source>');
+		expect(lastRequest.messages[1].content).toContain('<source i="1" placeholders="none">Hello</source>');
+		expect(lastRequest.messages[1].content).toContain('<source i="2" placeholders="none">Goodbye</source>');
 	});
 
 	it('should include dictionary examples when matches found', async () => {
@@ -87,7 +87,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 			usage: { prompt_tokens: 200, completion_tokens: 120, total_tokens: 320 },
 		});
 
-		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4o-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
+		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4.1-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
 
 		expect(result.success).toBe(true);
 		expect(result.translations).toHaveLength(3);
@@ -102,13 +102,13 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		// First user message should include dictionary examples
 		const promptMessage = lastRequest.messages[1].content;
 		expect(promptMessage).toContain('<!-- Dictionary Examples for Consistency -->');
-		expect(promptMessage).toContain('<source i="1">hello</source>');
-		expect(promptMessage).toContain('<source i="2">login</source>');
-		expect(promptMessage).toContain('<source i="3">dashboard</source>');
+		expect(promptMessage).toContain('<source i="1" placeholders="none">hello</source>');
+		expect(promptMessage).toContain('<source i="2" placeholders="none">login</source>');
+		expect(promptMessage).toContain('<source i="3" placeholders="none">dashboard</source>');
 
 		// And actual strings with offset indices
-		expect(promptMessage).toContain('<source i="4">Hello World</source>');
-		expect(promptMessage).toContain('<source i="5">Login to dashboard</source>');
+		expect(promptMessage).toContain('<source i="4" placeholders="none">Hello World</source>');
+		expect(promptMessage).toContain('<source i="5" placeholders="none">Login to dashboard</source>');
 	});
 
 	it('should handle dry run with dictionary cost calculation', async () => {
@@ -125,7 +125,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		const result = await provider.translateBatch(
 			batch,
 			'fr_FR',
-			'gpt-4o-mini',
+			'gpt-4.1-mini',
 			'Translate to French',
 			3,
 			1000,
@@ -157,12 +157,12 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 
 		mockClient.queueResponse(createSuccessResponse(['Expected response']));
 
-		await provider.translateBatch(batch, 'fr_CA', 'gpt-4o-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
+		await provider.translateBatch(batch, 'fr_CA', 'gpt-4.1-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
 
 		// Should use the specific CA dictionary
 		const lastRequest = mockClient.getLastRequest();
 		const promptMessage = lastRequest.messages[1].content;
-		expect(promptMessage).toContain('<source i="1">login</source>');
+		expect(promptMessage).toContain('<source i="1" placeholders="none">login</source>');
 
 		const assistantMessage = lastRequest.messages[2].content;
 		expect(assistantMessage).toContain('Connexion (CA)');
@@ -175,7 +175,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		const batch = [{ msgid: 'Hello' }];
 		mockClient.queueResponse(createSuccessResponse(['Bonjour']));
 
-		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4o-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
+		const result = await provider.translateBatch(batch, 'fr_FR', 'gpt-4.1-mini', 'Translate to French', 3, 1000, 60, false, null, null, 1);
 
 		expect(result.success).toBe(true);
 
@@ -203,7 +203,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		const result = await provider.translateBatch(
 			batch,
 			'fr_FR',
-			'gpt-4o-mini',
+			'gpt-4.1-mini',
 			'Translate to French',
 			3,
 			1000,
@@ -220,9 +220,10 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		// Verify prompt includes dictionary and plural instructions
 		const lastRequest = mockClient.getLastRequest();
 		const promptMessage = lastRequest.messages[1].content;
-		expect(promptMessage).toContain('<source i="1">item</source>');
-		expect(promptMessage).toContain('<source i="2">One item|%d items</source>');
-		expect(promptMessage).toContain('Items with "|" need 2 forms');
+		expect(promptMessage).toContain('<source i="1" placeholders="none">item</source>');
+		expect(promptMessage).toContain('<singular>One item</singular>');
+		expect(promptMessage).toContain('<plural>%d items</plural>');
+		expect(promptMessage).toContain('For entries with <singular> and <plural> tags, provide 2 plural forms');
 	});
 
 	it('should handle API errors gracefully with dictionary', async () => {
@@ -238,7 +239,7 @@ describe('OpenAI Provider with Dictionary Integration', () => {
 		const result = await provider.translateBatch(
 			batch,
 			'fr_FR',
-			'gpt-4o-mini',
+			'gpt-4.1-mini',
 			'Translate to French',
 			0, // No retries
 			1000,

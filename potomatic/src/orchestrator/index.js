@@ -9,6 +9,7 @@ import { ProviderFactory } from '../providers/ProviderFactory.js';
 import { ReporterFactory } from '../reporters/ReporterFactory.js';
 import { getFileNamingLocale } from '../utils/languageMapping.js';
 import { formatCount } from '../utils/pluralization.js';
+import { getTotalValidationIssues, formatValidationBreakdown } from '../utils/validationStats.js';
 
 /**
  * Main orchestrator class that coordinates the translation workflow.
@@ -68,8 +69,8 @@ export class TranslationOrchestrator {
 			this.mainLogger.info(`Using .po file prefix: "${this.config.poFilePrefix}"`);
 		}
 
-		if (this.config.poHeaderTemplate) {
-			this.mainLogger.info(`Using PO header template: ${this.config.poHeaderTemplate}`);
+		if (this.config.poHeaderTemplatePath) {
+			this.mainLogger.info(`Using PO header template: ${this.config.poHeaderTemplatePath}`);
 		}
 
 		if (this.config.maxStringsTotal) {
@@ -342,6 +343,7 @@ export class TranslationOrchestrator {
 			ctx.totalStringsProcessed = (ctx.totalStringsProcessed || 0) + stringsProcessed;
 
 			this._updateSequentialTaskTitle(task, language, stats);
+			this._logValidationWarnings(language, stats);
 
 			return stats;
 		} catch (error) {
@@ -633,6 +635,8 @@ export class TranslationOrchestrator {
 
 		this.mainLogger.info(`✔ Finished ${language}: ${resultParts.join(', ')}. ${costDisplay}: $${languageCost.toFixed(4)}. Total ${this.config.dryRun ? 'estimated ' : ''}cost: $${totalCostAccumulated.toFixed(4)}/$${this.config.maxCost.toFixed(4)}`);
 
+		this._logValidationWarnings(language, stats);
+
 		if (stats.skippedDueToBudget > 0 && languageCost === 0) {
 			const remainingBudget = this.config.maxCost - totalCostAccumulated;
 
@@ -756,6 +760,7 @@ export class TranslationOrchestrator {
 					ctx.results.push(stats);
 
 					this._updateTaskTitle(task, language, stats);
+					this._logValidationWarnings(language, stats);
 				} catch (error) {
 					const endTime = Date.now();
 					const executionTimeMs = endTime - startTime;
@@ -787,6 +792,30 @@ export class TranslationOrchestrator {
 		});
 
 		task.title = line;
+	}
+
+	/**
+	 * Logs validation warnings to the main logger if any validation issues were detected.
+	 *
+	 * @private
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param {string} language - Language code.
+	 * @param {Object} stats - Language processing statistics.
+	 */
+	_logValidationWarnings(language, stats) {
+		// Check if validation stats exist and verbosity level is at least 1.
+		if (!stats.validationStats || (this.config.verboseLevel || 1) < 1) {
+			return;
+		}
+
+		const totalValidationIssues = getTotalValidationIssues(stats.validationStats);
+
+		if (totalValidationIssues > 0) {
+			const breakdown = formatValidationBreakdown(stats.validationStats);
+			this.mainLogger.warn(`⚠️  ${language}: ${breakdown}. Run with -v 2 for details.`);
+		}
 	}
 
 	/**
@@ -952,6 +981,16 @@ export class TranslationOrchestrator {
 		if (totalTranslated === 0 && totalFailed > 0) {
 			if (!(this.config.outputFormat === 'json' && !this.config.outputFile)) {
 				this.mainLogger.warn('Processing completed but no strings were successfully translated.');
+			}
+
+			return 1;
+		}
+
+		// A partially translated run leaves untranslated strings in the .po file. Reporting
+		// that as success hides the gap from anyone running this unattended.
+		if (totalFailed > 0) {
+			if (!(this.config.outputFormat === 'json' && !this.config.outputFile)) {
+				this.mainLogger.warn(`Processing completed with ${formatCount(totalFailed, 'string')} left untranslated.`);
 			}
 
 			return 1;

@@ -3,6 +3,10 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+[Unreleased]
+
+- Changed: Bundled Potomatic is publishpress/library-potomatic 1.4.1. The executable is `potomatic`. `potomatic.js` is still accepted. The default model is `gpt-4.1-mini`. Set `REASONING_EFFORT` to pass `--reasoning-effort`. A run that leaves strings untranslated still repairs the written PO files, then exits with an error.
+
 [1.7.0] - 19 Nov, 2026
 
 - Added: `--repair-placeholders` and the `format` audit check. A printf placeholder mismatch is sent to OpenAI. The reply is saved only when it is in the target language and its placeholders match the source. The repair stops at the same $5 OpenAI cap as Potomatic. Extra backslashes before quotes in translations are removed. A bad placeholder can fatal on PHP 8.

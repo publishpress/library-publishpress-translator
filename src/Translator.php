@@ -125,7 +125,7 @@ class Translator
     /**
      * Default Potomatic AI settings
      */
-    private const DEFAULT_AI_MODEL = 'gpt-4o-mini';
+    private const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
     private const DEFAULT_AI_BATCH_SIZE = 40;
     private const DEFAULT_AI_JOBS = 8;
     private const MIN_AI_BATCH_SIZE = 1;
@@ -2187,17 +2187,24 @@ class Translator
         $isDevWorkspace = $this->isDevWorkspace();
 
         $possiblePaths = [];
+        $directories = [];
 
         if ($isDevWorkspace) {
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
+            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/';
+            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/';
         } else {
-            $possiblePaths[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/potomatic.js';
-            $possiblePaths[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/potomatic.js';
+            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/';
+            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/';
         }
 
         // Always check library's own potomatic (for development)
-        $possiblePaths[] = __DIR__ . '/../potomatic/potomatic.js';
+        $directories[] = __DIR__ . '/../potomatic/';
+
+        foreach ($directories as $directory) {
+            foreach (['potomatic', 'potomatic.js'] as $basename) {
+                $possiblePaths[] = $directory . $basename;
+            }
+        }
 
         foreach ($possiblePaths as $path) {
             if (file_exists($path)) {
@@ -2272,6 +2279,11 @@ class Translator
         $cmd .= ' --output-dir ' . escapeshellarg($this->languagesDir);
         $cmd .= ' --po-file-prefix ' . escapeshellarg($textDomain . '-');
         $cmd .= ' --model ' . escapeshellarg($this->potomaticSettings['model']);
+
+        $reasoningEffort = getenv('REASONING_EFFORT');
+        if (is_string($reasoningEffort) && $reasoningEffort !== '') {
+            $cmd .= ' --reasoning-effort ' . escapeshellarg($reasoningEffort);
+        }
         $cmd .= ' --batch-size ' . (int) $this->potomaticSettings['batch_size'];
         $cmd .= ' --jobs ' . (int) $this->potomaticSettings['jobs'];
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
@@ -3140,38 +3152,42 @@ class Translator
                 }
                 $this->output->endBoxed();
 
-                if ($returnCode === 0) {
-                    $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
-                    foreach ($poFiles as $poFile) {
-                        $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
+                $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
+                if (!is_array($poFiles)) {
+                    $poFiles = [];
+                }
 
-                        // Skip processing if --languages flag is set and this language is not in the target list
-                        if ($this->customTargetLanguages && $poLanguage && !in_array($poLanguage, $this->targetLanguages)) {
-                            continue;
-                        }
+                foreach ($poFiles as $poFile) {
+                    $poLanguage = $this->extractLanguageFromPoFile($poFile, $textDomain);
 
-                        if ($this->weblateClient) {
-                            $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
-                            $this->weblateClient->removeDuplicateReferences($poFile);
-                            $this->weblateClient->removeDuplicateExtractedComments($poFile);
-                        }
-
-                        $this->repairPluralPipeDelimitedEntries($poFile);
-
-                        // Validate no malformed entries remain
-                        $this->validatePluralEntries($poFile);
-
-                        $this->repairPoFormatStrings($poFile, false);
-
-                        $this->revertPluginNameTranslations($poFile);
-
-                        if ($poLanguage) {
-                            $this->applyTranslationOverrides($poFile, $poLanguage);
-                        }
-
-                        $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
+                    // Skip processing if --languages flag is set and this language is not in the target list
+                    if ($this->customTargetLanguages && $poLanguage && !in_array($poLanguage, $this->targetLanguages)) {
+                        continue;
                     }
 
+                    if ($this->weblateClient) {
+                        $this->weblateClient->cleanupDuplicatePoHeaders($poFile);
+                        $this->weblateClient->removeDuplicateReferences($poFile);
+                        $this->weblateClient->removeDuplicateExtractedComments($poFile);
+                    }
+
+                    $this->repairPluralPipeDelimitedEntries($poFile);
+
+                    // Validate no malformed entries remain
+                    $this->validatePluralEntries($poFile);
+
+                    $this->repairPoFormatStrings($poFile, false);
+
+                    $this->revertPluginNameTranslations($poFile);
+
+                    if ($poLanguage) {
+                        $this->applyTranslationOverrides($poFile, $poLanguage);
+                    }
+
+                    $this->markIdenticalTranslationsAsFuzzy($poFile, $poLanguage);
+                }
+
+                if ($returnCode === 0) {
                     $this->output->blankLine();
                     $this->output->step('Successfully processed ' . $potFileName);
                 } else {
