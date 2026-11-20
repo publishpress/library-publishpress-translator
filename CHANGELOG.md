@@ -5,6 +5,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.8.1] - 20 Nov, 2026
+
+- Added: A translate run prints one OpenAI total at the end. The total is the Potomatic cost plus the placeholder-repair cost.
+
 [1.8.0] - 19 Nov, 2026
 
 - Changed: Bundled Potomatic is publishpress/library-potomatic 1.4.1. The executable is `potomatic`. `potomatic.js` is still accepted. The default model is `gpt-6-luna` with reasoning effort `low`. Set `REASONING_EFFORT` to override the effort. A run that leaves strings untranslated still repairs the written PO files, then exits with an error.
