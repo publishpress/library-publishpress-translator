@@ -5,6 +5,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.8.2] - 20 Nov, 2026
+
+- Added: `VERBOSE_LEVEL` sets the Potomatic log level. The default stays `2`. `0` is errors, `1` is normal, `2` is verbose, and `3` is debug.
+
 [1.8.1] - 20 Nov, 2026
 
 - Added: A translate run prints one OpenAI total at the end. The total is the Potomatic cost plus the placeholder-repair cost.
