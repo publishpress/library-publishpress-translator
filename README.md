@@ -374,7 +374,7 @@ Potomatic can add a `%s`, drop a `%1$s`, mix both styles in one string, or write
 vendor/bin/publishpress-translate --repair-placeholders
 ```
 
-A count or type mismatch keeps the translated sentence. Extra placeholders are removed. Missing placeholders are appended at the end. A spacing or quote-escape error keeps the translation. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
+A count or type mismatch is sent to OpenAI with `OPENAI_API_KEY`. The model must return the same sentence in the target language with the source placeholders. A reply that still has the wrong placeholders is discarded. The repair stops at the same $5 OpenAI cap as Potomatic (`max_cost`). One budget covers every language file in the run. Spacing and quote-escape fixes stay local. Compile `.mo` and `.l10n.php` again after the repair. `--audit` check `format` reports anything still wrong.
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
 

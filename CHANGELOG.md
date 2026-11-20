@@ -5,7 +5,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
-- Added: `--repair-placeholders` and the `format` audit check. After Potomatic runs, printf placeholders that do not match the source string are aligned inside the translated sentence. Extra placeholders are removed. Missing placeholders are appended. The repair does not replace the sentence with English. Extra backslashes before quotes in translations are removed. A bad placeholder can fatal on PHP 8.
+- Added: `--repair-placeholders` and the `format` audit check. A printf placeholder mismatch is sent to OpenAI. The reply is saved only when it is in the target language and its placeholders match the source. The repair stops at the same $5 OpenAI cap as Potomatic. Extra backslashes before quotes in translations are removed. A bad placeholder can fatal on PHP 8.
 
 [1.6.3] - 18 Nov, 2026
 

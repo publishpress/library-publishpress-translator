@@ -12,6 +12,7 @@ use Exception;
 use InvalidArgumentException;
 use PublishPress\Translations\Audit\AuditOptions;
 use PublishPress\Translations\Audit\Auditor;
+use PublishPress\Translations\Support\AiFormatStringFixer;
 use PublishPress\Translations\Support\IdenticalTranslationPolicy;
 use PublishPress\Translations\Support\PoFormatRepair;
 use PublishPress\Translations\Support\TranslationOverrides;
@@ -167,6 +168,13 @@ class Translator
      * @var AuditOptions
      */
     private $auditOptions;
+
+    /**
+     * Shared OpenAI budget for placeholder repair across every .po file in one run.
+     *
+     * @var AiFormatStringFixer|null
+     */
+    private $formatStringFixer;
 
     /**
      * Constructor
@@ -529,6 +537,9 @@ class Translator
         $start = $this->writeCliBannerAndPluginContext();
         $this->output->phase('Repairing printf placeholders in existing .po files');
         $this->output->step('Languages directory: ' . $this->languagesDir);
+        $this->output->step(
+            'OpenAI cost cap for placeholder repair: $' . number_format((float) $this->potomaticSettings['max_cost'], 2)
+        );
 
         $poFiles = glob($this->languagesDir . '/*.po');
 
@@ -568,7 +579,12 @@ class Translator
     private function repairPoFormatStrings(string $poFile, bool $silent): int
     {
         try {
-            $changes = PoFormatRepair::repairFile($poFile);
+            $changes = PoFormatRepair::repairFile(
+                $poFile,
+                $this->getApiKey(),
+                $silent ? null : $this->output,
+                $this->formatStringFixer()
+            );
         } catch (Exception $e) {
             if (!$silent) {
                 $this->output->warning(basename($poFile) . ': format repair failed: ' . $e->getMessage());
@@ -589,12 +605,25 @@ class Translator
                     $this->output->line('  … ' . (count($changes) - $shown) . ' more');
                     break;
                 }
-                $this->output->line('  ' . $change['action'] . ': ' . $change['reason']);
+                $preview = str_replace(["\r", "\n"], ' ', $change['after']);
+                if (strlen($preview) > 90) {
+                    $preview = substr($preview, 0, 87) . '...';
+                }
+                $this->output->line('  ' . $change['action'] . ': ' . $preview);
                 $shown++;
             }
         }
 
         return count($changes);
+    }
+
+    private function formatStringFixer(): AiFormatStringFixer
+    {
+        if ($this->formatStringFixer === null) {
+            $this->formatStringFixer = new AiFormatStringFixer((float) $this->potomaticSettings['max_cost']);
+        }
+
+        return $this->formatStringFixer;
     }
 
     /**
