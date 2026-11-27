@@ -3,6 +3,6 @@
   "private": true,
   "description": "Potomatic CLI via @publishpress/potomatic on npmjs.com (PublishPress fork).",
   "dependencies": {
-    "@publishpress/potomatic": "git+https://github.com/publishpress/library-potomatic.git#v1.4.4"
+    "@publishpress/potomatic": "^1.4.5"
   }
 }

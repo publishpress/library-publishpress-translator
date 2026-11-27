@@ -5,7 +5,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
-- Changed: Potomatic is installed with npm from [publishpress/library-potomatic](https://github.com/publishpress/library-potomatic) as npm `@publishpress/potomatic` (not the unrelated `potomatic` package on npmjs.com). Composer runs `npm install` at this package root. The bundled `potomatic/` directory is deprecated.
+- Changed: Potomatic depends on [`@publishpress/potomatic`](https://www.npmjs.com/package/@publishpress/potomatic) `^1.4.5` from npmjs.com (PublishPress fork; not the unrelated `potomatic` package on npmjs.com). Composer `post-install` runs `npm install` at this package root.
 
 [1.8.2] - 20 Nov, 2026
 
