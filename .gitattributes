@@ -21,9 +21,7 @@
 *.tar.gz export-ignore
 *.testing export-ignore
 *.zip export-ignore
-/composer.json export-ignore
 /dist export-ignore
-/package.json export-ignore
 /screenshot-*.png export-ignore
 /tests export-ignore
 behat.yml export-ignore
@@ -40,7 +38,6 @@ jsconfig.json export-ignore
 multisite.xml export-ignore
 multisite.xml.dist export-ignore
 node_modules export-ignore
-package-lock.json export-ignore
 phpcs.ruleset.xml export-ignore
 phpcs.xml export-ignore
 phpcs.xml.dist export-ignore

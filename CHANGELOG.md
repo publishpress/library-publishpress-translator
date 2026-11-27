@@ -5,6 +5,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.9.1] - 27 Nov, 2026
+
+### Fixed
+
+- Composer/Packagist installs include `package.json` and `package-lock.json`. Git `export-ignore` no longer strips them from release archives.
+- `setup-potomatic.php` installs `@publishpress/potomatic` from npm when `package.json` is missing (older v1.9.0 vendor trees).
+
 [1.9.0] - 27 Nov, 2026
 
 ### Changed

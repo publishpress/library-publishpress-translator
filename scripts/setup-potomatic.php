@@ -24,10 +24,7 @@ if (is_file($potomaticExec) && is_dir($nodeModulesDir)) {
 
 $output->step('Setting up Potomatic CLI tool...');
 
-if (!is_file($libDir . '/package.json')) {
-    $output->error("package.json not found at {$libDir}");
-    exit(2);
-}
+$hasManifest = is_file($libDir . '/package.json');
 
 exec('node --version 2>&1', $commandOutput, $returnCode);
 if ($returnCode !== 0) {
@@ -45,7 +42,13 @@ if ($returnCode !== 0) {
     exit(4);
 }
 
-$output->step('Installing Potomatic from package.json...');
+if ($hasManifest) {
+    $output->step('Installing Potomatic from package.json...');
+    $npmArgs = 'install --omit=dev';
+} else {
+    $output->step('Installing @publishpress/potomatic from npm...');
+    $npmArgs = 'install --omit=dev --no-save @publishpress/potomatic@^1.4.5';
+}
 
 $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 $npmCommand = $isWindows ? 'npm.cmd' : 'npm';
@@ -56,7 +59,7 @@ $descriptorSpec = [
     2 => ['pipe', 'w'],
 ];
 $process = proc_open(
-    "{$npmCommand} install --omit=dev",
+    "{$npmCommand} {$npmArgs}",
     $descriptorSpec,
     $pipes,
     $libDir
