@@ -24,9 +24,9 @@ alwaysApply: true
 
 ## Potomatic (hard rule)
 
-- **`potomatic/` is external** — bundled upstream, **read-only** in this repo.
-- **Never** edit JS under `potomatic/` (src, config, tests, package.json).
-- Translation/AI behavior changes → **PHP** (`Translator`, dictionaries, audit) or **upstream Potomatic release**, not local patches.
+- **`@publishpress/potomatic` is external** — npm dependency from [library-potomatic](https://github.com/publishpress/library-potomatic), **read-only** under `node_modules/`.
+- **Never** edit JS inside `node_modules/@publishpress/potomatic/`.
+- Translation/AI behavior changes → **PHP** (`Translator`, dictionaries, audit) or a new **library-potomatic** / npm release, not local patches.
 
 ## PHP constraints
 
@@ -54,5 +54,5 @@ alwaysApply: true
 - New 200+ line methods in `Translator.php`.
 - Raw `echo` in audit checks (use `Output` via context).
 - Growing `Auditor::run()` with check logic — belongs in check class.
-- **Any edit under `potomatic/`** (including “small” prompt or retry fixes).
+- **Any edit under `node_modules/@publishpress/potomatic/`** (including “small” prompt or retry fixes).
 - Fixing translation bugs in JS instead of PHP integration or dependency upgrade.

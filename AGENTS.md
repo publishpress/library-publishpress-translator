@@ -6,10 +6,10 @@ README = end-user docs. **This file wins on conflicts** for agent behavior.
 
 ## What this repo is
 
-Composer package `publishpress/translations`. CLI `bin/publishpress-translate` → PHP orchestration + **Potomatic** (external Node dep, bundled) + optional **Weblate**.
+Composer package `publishpress/translations`. CLI `bin/publishpress-translate` → PHP orchestration + **Potomatic** (npm `@publishpress/potomatic`) + optional **Weblate**.
 
 - **PHP (edit here)**: `src/` (`PublishPress\Translations\`), PSR-4 autoload
-- **Potomatic (do not edit)**: `potomatic/` — upstream bundle; PHP only shells out via `Translator::buildCommand()`
+- **Potomatic (do not edit)**: `node_modules/@publishpress/potomatic/` — npm package; PHP only shells out via `Translator::buildCommand()`
 - **Config (edit here)**: `config/dictionaries.json` (merged into temp dict for Potomatic)
 - **Dev**: Docker `./dev-workspace/run` (same checks as CI)
 
@@ -29,7 +29,8 @@ Composer package `publishpress/translations`. CLI `bin/publishpress-translate` �
 | PO/git/AI helpers | `src/Audit/Support/*` |
 | Report output | `src/Audit/Report/*` |
 | CLI UX | `src/Output.php` |
-| Potomatic CLI args / paths | `src/Translator.php` (`buildCommand`, `getPotomaticPath`) — **not** `potomatic/` |
+| Potomatic CLI args / paths | `src/Translator.php` (`buildCommand`, `getPotomaticPath`) — **not** the npm package tree |
+| Potomatic version pin | Root `package.json` → `@publishpress/potomatic` |
 | Brand dictionary | `config/dictionaries.json` |
 
 ## Practices we follow (keep doing)
@@ -64,7 +65,7 @@ Detailed rules: `.cursor/rules/practices.mdc` (always on). Summary:
 
 **Potomatic**
 
-- **Never edit `potomatic/`** — external dependency; integrate from PHP only.
+- **Never edit `node_modules/@publishpress/potomatic/`** — external dependency; integrate from PHP only. Bump `package.json` / run `npm install` to upgrade.
 - Dictionaries/overrides: PHP `config/dictionaries.json` + `TranslationOverrides` → temp files passed to CLI.
 
 ## Practices we aspire to (do not regress)
@@ -97,7 +98,7 @@ Detailed rules: `.cursor/rules/practices.mdc` (always on). Summary:
 ./dev-workspace/run composer check:stan   # local; not in root CI yet
 ```
 
-Do **not** run Potomatic lint/tests as part of normal agent work — `potomatic/` is not maintained in this repo.
+Do **not** run Potomatic lint/tests as part of normal agent work — maintain those in **publishpress/library-potomatic**, not here.
 
 ## Drift watchlist
 

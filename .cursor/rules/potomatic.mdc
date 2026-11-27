@@ -1,28 +1,28 @@
 ---
-description: Potomatic is external — do not edit potomatic/
-globs: potomatic/**
+description: Potomatic is external — do not edit the npm package
+globs: node_modules/@publishpress/potomatic/**
 alwaysApply: false
 ---
 
 # Potomatic — external dependency (read-only)
 
-`potomatic/` is a **bundled copy of upstream Potomatic** (GravityKit). **Do not edit** files under `potomatic/` in this repo.
+Potomatic ships as npm [`@publishpress/potomatic`](https://www.npmjs.com/package/@publishpress/potomatic) (PublishPress fork of GravityKit Potomatic). It is installed under `node_modules/@publishpress/potomatic/`. **Do not edit** files there in this repo.
 
-- No fixes, prompts, providers, tests, or config changes in `potomatic/`.
-- Need different AI/batch behavior → change **upstream Potomatic** or bump the vendored copy via maintainer workflow — **not** agent edits here.
+- No fixes, prompts, providers, tests, or config changes inside the npm package.
+- Need different AI/batch behavior → bump `@publishpress/potomatic` in root `package.json` or change **publishpress/library-potomatic** upstream — **not** agent edits under `node_modules/`.
 
-## What agents may change (PHP only)
+## What agents may change (PHP and packaging only)
 
 - `src/Translator.php` — `buildCommand()`, flags passed to CLI, dictionary temp dir, paths via `getPotomaticPath()`
-- `scripts/setup-potomatic.php` — install `node_modules` only (if packaging changes)
-- `composer.json` `setup-potomatic` script — install hook only
+- `scripts/setup-potomatic.php` — verify / install `node_modules` (if packaging changes)
+- `composer.json` / root `package.json` — version pin and install hooks
 
 ## Integration reference (read-only)
 
-PHP invokes `potomatic.js` with e.g. `--target-languages`, `--pot-file-path`, `--output-dir`, `--po-file-prefix`, `--model`, `--batch-size`, `--jobs`, `--max-cost`, `--api-key`, optional `--use-dictionary` + `--dictionary-path`.
+PHP invokes the `potomatic` binary with e.g. `--target-languages`, `--pot-file-path`, `--output-dir`, `--po-file-prefix`, `--model`, `--batch-size`, `--jobs`, `--max-cost`, `--api-key`, optional `--use-dictionary` + `--dictionary-path`.
 
-PublishPress-specific terms: `config/dictionaries.json` + env overrides → temp dictionary JSON for Potomatic (built in PHP, not in `potomatic/config/`).
+PublishPress-specific terms: `config/dictionaries.json` + env overrides → temp dictionary JSON for Potomatic (built in PHP, not in the npm package config tree).
 
 ## If task sounds like “fix Potomatic”
 
-Stop. Implement in PHP (wrappers, post-process PO, audit checks, Weblate flow) or escalate dependency update. **Never patch `potomatic/src`.**
+Stop. Implement in PHP (wrappers, post-process PO, audit checks, Weblate flow) or escalate a **library-potomatic** release. **Never patch** `node_modules/@publishpress/potomatic`.

@@ -797,4 +797,4 @@ GPL-3.0-or-later
 
 ## Credits
 
-Built with [Potomatic](https://github.com/GravityKit/potomatic) by GravityKit.
+Built with [@publishpress/potomatic](https://www.npmjs.com/package/@publishpress/potomatic) (PublishPress fork of [GravityKit Potomatic](https://github.com/GravityKit/Potomatic)).
