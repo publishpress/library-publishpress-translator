@@ -5,6 +5,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+[1.9.2] - 27 Nov, 2026
+
+### Fixed
+
+- Composer `post-install` runs `scripts/setup-potomatic.php` instead of a root-level `npm install` that used the wrong working directory.
+
 [1.9.1] - 27 Nov, 2026
 
 ### Fixed

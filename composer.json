@@ -70,9 +70,7 @@
             "@config:phpcs"
         ],
         "setup-potomatic": [
-            "@php -r \"echo '\\n\\u1F4E6 Setting up Potomatic...\\n';\"",
-            "npm install --omit=dev --silent || echo 'Warning: npm not found. Please install Node.js from https://nodejs.org/'",
-            "@php -r \"echo '\\u2713 Potomatic ready!\\n\\n';\""
+            "@php scripts/setup-potomatic.php"
         ]
     },
     "minimum-stability": "stable",
