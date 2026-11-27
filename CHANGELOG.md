@@ -5,9 +5,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
-- Changed: AGENTS.md, Cursor rules, and README describe npm `@publishpress/potomatic` instead of a vendored `potomatic/` tree.
+[1.9.0] - 27 Nov, 2026
 
-- Changed: Potomatic depends on [`@publishpress/potomatic`](https://www.npmjs.com/package/@publishpress/potomatic) `^1.4.5` from npmjs.com (PublishPress fork; not the unrelated `potomatic` package on npmjs.com). Composer `post-install` runs `npm install` at this package root.
+### Changed
+
+- Potomatic installs from npm [`@publishpress/potomatic`](https://www.npmjs.com/package/@publishpress/potomatic) `^1.4.5` (PublishPress fork). The vendored `potomatic/` tree is removed. Composer `post-install` runs `npm install` at the package root.
+- AGENTS.md, Cursor rules, and README describe the npm layout.
+
+### Added
+
+- Infra audit workflow posts inventory for `php-library-translator`.
 
 [1.8.2] - 20 Nov, 2026
 
