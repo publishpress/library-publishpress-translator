@@ -1,0 +1,8 @@
+{
+  "name": "publishpress-translations",
+  "private": true,
+  "description": "Potomatic CLI from publishpress/library-potomatic (@publishpress/potomatic; not npmjs.com/potomatic).",
+  "dependencies": {
+    "@publishpress/potomatic": "git+https://github.com/publishpress/library-potomatic.git#v1.4.2"
+  }
+}

@@ -2284,16 +2284,16 @@ class Translator
         $possiblePaths = [];
         $directories = [];
 
-        if ($isDevWorkspace) {
-            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/';
-            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/';
-        } else {
-            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/potomatic/';
-            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/potomatic/';
-        }
+        $libraryRoot = dirname(__DIR__);
+        $directories[] = $libraryRoot . '/node_modules/@publishpress/potomatic/';
 
-        // Always check library's own potomatic (for development)
-        $directories[] = __DIR__ . '/../potomatic/';
+        if ($isDevWorkspace) {
+            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/node_modules/@publishpress/potomatic/';
+            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/node_modules/@publishpress/potomatic/';
+        } else {
+            $directories[] = $this->pluginRoot . '/vendor/publishpress/translations/node_modules/@publishpress/potomatic/';
+            $directories[] = $this->pluginRoot . '/lib/vendor/publishpress/translations/node_modules/@publishpress/potomatic/';
+        }
 
         foreach ($directories as $directory) {
             foreach (['potomatic', 'potomatic.js'] as $basename) {

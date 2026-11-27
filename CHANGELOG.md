@@ -5,6 +5,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 [Unreleased]
 
+- Changed: Potomatic is installed with npm from [publishpress/library-potomatic](https://github.com/publishpress/library-potomatic) as npm `@publishpress/potomatic` (not the unrelated `potomatic` package on npmjs.com). Composer runs `npm install` at this package root. The bundled `potomatic/` directory is deprecated.
+
 [1.8.2] - 20 Nov, 2026
 
 - Added: `VERBOSE_LEVEL` sets the Potomatic log level. The default stays `2`. `0` is errors, `1` is normal, `2` is verbose, and `3` is debug.

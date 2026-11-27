@@ -1,6 +1,0 @@
-node_modules
-.history
-tests/coverage
-*.po
-*.pot
-debug/ 
